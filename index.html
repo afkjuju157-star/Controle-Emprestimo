@@ -121,6 +121,7 @@
               <div><span class="eyebrow">VISÃO GERAL</span><h1>Painel principal</h1><p>Acompanhe os resultados do seu negócio.</p></div>
               <button class="btn btn-primary" type="button" data-open-page="installments">＋ Novo empréstimo</button>
             </div>
+
             <div class="welcome-banner">
               <div class="banner-content">
                 <span class="banner-tag">GESTÃO MAIS FÁCIL</span>
@@ -132,12 +133,33 @@
                 <div class="banner-note">↗<br><b>Controle<br>em dia</b></div>
               </div>
             </div>
+
             <div class="stats-grid">
               <article class="stat-card"><div class="stat-label">Total emprestado <span class="stat-icon pink">↗</span></div><strong id="total-loaned">R$ 0,00</strong><small>Valor original dos empréstimos</small></article>
               <article class="stat-card"><div class="stat-label">Total recebido <span class="stat-icon green">✓</span></div><strong id="total-received">R$ 0,00</strong><small>Pagamentos registrados</small></article>
               <article class="stat-card"><div class="stat-label">Total pendente <span class="stat-icon amber">◷</span></div><strong id="total-pending">R$ 0,00</strong><small>Saldo a receber</small></article>
               <article class="stat-card"><div class="stat-label">Clientes <span class="stat-icon violet">♙</span></div><strong id="total-customers">0</strong><small>Clientes cadastrados</small></article>
             </div>
+
+            <article class="panel collection-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Lista de cobranças do dia</h2>
+                  <p id="collection-date">Clientes previstos para hoje</p>
+                </div>
+                <span id="daily-close-status" class="status status-pending">Em andamento</span>
+              </div>
+              <div id="collection-list">
+                <p class="empty-state">Carregando clientes...</p>
+              </div>
+              <div class="panel-heading">
+                <div>
+                  <h3>Fechamento diário</h3>
+                  <p id="daily-close-summary">O movimento será fechado às 23h.</p>
+                </div>
+              </div>
+            </article>
+
             <div class="dashboard-grid">
               <article class="panel">
                 <div class="panel-heading"><div><h2>Empréstimos recentes</h2><p>Últimos contratos registrados</p></div><button type="button" class="text-button" data-open-page="installments">Ver todos →</button></div>
