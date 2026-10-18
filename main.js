@@ -2,8 +2,8 @@
 
 /* =========================================================
    CREDIFÁCIL — CONTROLE DE EMPRÉSTIMOS
-   Cadastro, login, clientes, empréstimos, pagamentos,
-   recibos, despesas e encerramento diário às 23h.
+   Clientes, empréstimos, pagamentos, recibos em PNG,
+   painel financeiro, despesas, histórico e sessão.
    ========================================================= */
 
 const KEYS = {
@@ -17,12 +17,13 @@ const KEYS = {
   logoutDay: "credifacil_logout_day_v1"
 };
 
-const $ = (id) => document.getElementById(id);
+const $ = id => document.getElementById(id);
 
 let currentUser = null;
 let currentReceipt = null;
 let messageTimer = null;
 let logoutTimer = null;
+let receiptImageURL = null;
 
 /* =========================================================
    ARMAZENAMENTO
@@ -78,7 +79,7 @@ function dateBR(value) {
 }
 
 function escapeHTML(value) {
-  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+  return String(value ?? "").replace(/[&<>"']/g, char => ({
     "&": "&amp;",
     "<": "&lt;",
     ">": "&gt;",
@@ -86,8 +87,6 @@ function escapeHTML(value) {
     "'": "&#39;"
   })[char]);
 }
-
-/* Liga eventos somente quando o elemento existe. */
 
 function on(idName, eventName, callback) {
   const element = $(idName);
@@ -158,18 +157,11 @@ async function hashPassword(password) {
       return Array.from(new Uint8Array(hash))
         .map(b => b.toString(16).padStart(2, "0"))
         .join("");
-    } catch (error) {
+    } catch {
       console.warn("Não foi possível calcular o hash da senha.");
     }
   }
 
-  /*
-   * Compatibilidade com contas antigas que possam ter sido
-   * criadas quando o aplicativo estava aberto localmente.
-   *
-   * Para segurança real de contas, use um servidor de
-   * autenticação. O armazenamento local não é um servidor.
-   */
   return password;
 }
 
@@ -177,23 +169,19 @@ async function hashPassword(password) {
    SESSÃO E ENCERRAMENTO ÀS 23H
    ========================================================= */
 
-function currentDayKey() {
-  return today();
-}
-
 function saveLastEmail(email) {
   try {
     if (email) {
-      localStorage.setItem(KEYS.lastEmail, email.trim().toLowerCase());
+      localStorage.setItem(
+        KEYS.lastEmail,
+        email.trim().toLowerCase()
+      );
     }
-  } catch (error) {
-    console.warn("Não foi possível guardar o e-mail.");
-  }
+  } catch {}
 }
 
 function restoreLastEmail() {
   const input = $("login-email");
-
   if (!input) return;
 
   try {
@@ -202,9 +190,7 @@ function restoreLastEmail() {
     if (email && !input.value) {
       input.value = email;
     }
-  } catch (error) {
-    // O login continua disponível mesmo sem armazenamento.
-  }
+  } catch {}
 }
 
 function stopLogoutTimer() {
@@ -219,9 +205,7 @@ function logout() {
 
   try {
     localStorage.removeItem(KEYS.session);
-  } catch (error) {
-    console.warn("Não foi possível encerrar a sessão salva.");
-  }
+  } catch {}
 
   currentUser = null;
   currentReceipt = null;
@@ -246,48 +230,33 @@ function logout() {
 
 function logoutAtElevenPM() {
   const now = new Date();
-
   const target = new Date(now);
+
   target.setHours(23, 0, 0, 0);
 
-  /*
-   * Se o horário de 23h de hoje já passou, agenda para
-   * as 23h do próximo dia.
-   */
   if (now.getTime() >= target.getTime()) {
     target.setDate(target.getDate() + 1);
   }
 
-  const delay = target.getTime() - now.getTime();
-
   stopLogoutTimer();
 
   logoutTimer = setTimeout(() => {
-    /*
-     * O marcador impede que o aplicativo repita o
-     * encerramento várias vezes no mesmo dia.
-     */
     try {
-      localStorage.setItem(KEYS.logoutDay, currentDayKey());
-    } catch (error) {
-      console.warn("Não foi possível salvar o horário.");
-    }
+      localStorage.setItem(KEYS.logoutDay, today());
+    } catch {}
 
     if (currentUser) {
       logout();
+
       showMessage(
-        "São 23h. Sua sessão foi encerrada. Entre novamente amanhã ou quando desejar.",
+        "São 23h. Sua sessão foi encerrada.",
         false,
         true
       );
     }
 
-    /*
-     * Agenda novamente para as 23h do dia seguinte.
-     */
     logoutAtElevenPM();
-
-  }, Math.min(delay, 2147483647));
+  }, Math.min(target.getTime() - now.getTime(), 2147483647));
 }
 
 function checkSessionAtStartup() {
@@ -297,33 +266,21 @@ function checkSessionAtStartup() {
     session = JSON.parse(
       localStorage.getItem(KEYS.session) || "null"
     );
-  } catch {
-    session = null;
-  }
+  } catch {}
 
-  /*
-   * Se o aplicativo foi fechado durante a noite, não é
-   * possível executar JavaScript em segundo plano.
-   * Na próxima abertura, a sessão é conferida novamente.
-   */
   let logoutDay = "";
 
   try {
     logoutDay = localStorage.getItem(KEYS.logoutDay) || "";
-  } catch {
-    logoutDay = "";
-  }
+  } catch {}
 
-  const now = new Date();
-  const afterEleven = now.getHours() >= 23;
+  const afterEleven = new Date().getHours() >= 23;
 
   if (session?.userId && afterEleven && logoutDay !== today()) {
     try {
       localStorage.setItem(KEYS.logoutDay, today());
       localStorage.removeItem(KEYS.session);
-    } catch (error) {
-      console.warn("Não foi possível atualizar a sessão.");
-    }
+    } catch {}
 
     session = null;
   }
@@ -350,7 +307,7 @@ function checkSessionAtStartup() {
 }
 
 /* =========================================================
-   CLIENTES E EMPRÉSTIMOS
+   CLIENTES, EMPRÉSTIMOS E PAGAMENTOS
    ========================================================= */
 
 function getCustomer(customerId) {
@@ -399,6 +356,229 @@ function loanLabel(loan) {
 }
 
 /* =========================================================
+   CÁLCULOS FINANCEIROS
+   ========================================================= */
+
+/*
+ * Os valores de lucro são estimativas com base no contrato.
+ * Para estimar o lucro recebido, distribuímos cada pagamento
+ * proporcionalmente entre capital e ganho previsto.
+ *
+ * Isso não substitui contabilidade nem comprova lucro líquido.
+ */
+
+function getFinancialTotals() {
+  const loans = ownRecords(KEYS.loans);
+  const payments = ownRecords(KEYS.payments);
+  const expenses = ownRecords(KEYS.expenses);
+
+  const capitalLent = loans.reduce(
+    (sum, loan) => sum + numberValue(loan.amount),
+    0
+  );
+
+  const contractTotal = loans.reduce(
+    (sum, loan) => sum + loanTotal(loan),
+    0
+  );
+
+  const totalReceived = payments.reduce(
+    (sum, payment) => sum + numberValue(payment.amount),
+    0
+  );
+
+  const receivable = loans.reduce(
+    (sum, loan) => sum + loanBalance(loan),
+    0
+  );
+
+  const expensesTotal = expenses.reduce(
+    (sum, expense) => sum + numberValue(expense.amount),
+    0
+  );
+
+  let expectedProfit = 0;
+  let estimatedProfitReceived = 0;
+  let capitalStillOut = 0;
+
+  loans.forEach(loan => {
+    const principal = Math.max(0, numberValue(loan.amount));
+    const total = Math.max(0, loanTotal(loan));
+    const received = Math.min(total, loanReceived(loan.id));
+
+    const profit = Math.max(0, total - principal);
+
+    expectedProfit += profit;
+
+    if (total > 0) {
+      const paidRatio = Math.min(1, received / total);
+
+      estimatedProfitReceived += profit * paidRatio;
+
+      const recoveredCapital = Math.min(
+        principal,
+        principal * paidRatio
+      );
+
+      capitalStillOut += Math.max(
+        0,
+        principal - recoveredCapital
+      );
+    } else {
+      capitalStillOut += principal;
+    }
+  });
+
+  const profitStillExpected = Math.max(
+    0,
+    expectedProfit - estimatedProfitReceived
+  );
+
+  const estimatedNetProfit = estimatedProfitReceived - expensesTotal;
+
+  return {
+    capitalLent,
+    contractTotal,
+    totalReceived,
+    receivable,
+    expensesTotal,
+    expectedProfit,
+    estimatedProfitReceived,
+    profitStillExpected,
+    estimatedNetProfit,
+    capitalStillOut
+  };
+}
+
+/* =========================================================
+   PAINEL FINANCEIRO
+   ========================================================= */
+
+function ensureFinancePanel() {
+  const page = $("page-dashboard");
+
+  if (!page || $("finance-panel")) return;
+
+  const panel = document.createElement("section");
+
+  panel.id = "finance-panel";
+  panel.className = "content-card finance-panel";
+
+  panel.innerHTML = `
+    <div class="section-heading">
+      <div>
+        <h2>Meu capital e meus ganhos</h2>
+        <p>Acompanhe o dinheiro emprestado, os recebimentos e o lucro estimado.</p>
+      </div>
+    </div>
+
+    <div class="finance-grid">
+      <div class="finance-item capital">
+        <span class="finance-label">Capital emprestado acumulado</span>
+        <strong id="finance-capital-lent">R$ 0,00</strong>
+        <small>Valor original dos empréstimos cadastrados.</small>
+      </div>
+
+      <div class="finance-item capital">
+        <span class="finance-label">Capital ainda em circulação</span>
+        <strong id="finance-capital-out">R$ 0,00</strong>
+        <small>Estimativa do capital ainda não recuperado.</small>
+      </div>
+
+      <div class="finance-item">
+        <span class="finance-label">Total recebido</span>
+        <strong id="finance-received">R$ 0,00</strong>
+        <small>Soma de todos os pagamentos registrados.</small>
+      </div>
+
+      <div class="finance-item">
+        <span class="finance-label">Falta receber dos contratos</span>
+        <strong id="finance-receivable">R$ 0,00</strong>
+        <small>Saldo total dos contratos em aberto.</small>
+      </div>
+
+      <div class="finance-item profit">
+        <span class="finance-label">Lucro estimado já recebido</span>
+        <strong id="finance-profit-received">R$ 0,00</strong>
+        <small>Estimativa da parte dos recebimentos que corresponde ao ganho.</small>
+      </div>
+
+      <div class="finance-item profit">
+        <span class="finance-label">Lucro estimado dos contratos</span>
+        <strong id="finance-profit-total">R$ 0,00</strong>
+        <small>Ganho previsto nos contratos cadastrados, antes das despesas.</small>
+      </div>
+
+      <div class="finance-item">
+        <span class="finance-label">Lucro previsto ainda não recebido</span>
+        <strong id="finance-profit-pending">R$ 0,00</strong>
+        <small>Estimativa do ganho que falta receber.</small>
+      </div>
+
+      <div class="finance-item">
+        <span class="finance-label">Despesas registradas</span>
+        <strong id="finance-expenses">R$ 0,00</strong>
+        <small>Soma das despesas cadastradas.</small>
+      </div>
+
+      <div class="finance-item profit">
+        <span class="finance-label">Resultado estimado após despesas</span>
+        <strong id="finance-net-profit">R$ 0,00</strong>
+        <small>Lucro estimado recebido menos despesas registradas.</small>
+      </div>
+    </div>
+
+    <p class="finance-note">
+      Atenção: são estimativas baseadas nos contratos e pagamentos registrados.
+      O resultado pode mudar se houver pagamentos atrasados, perdas, descontos
+      ou outras despesas. O capital em circulação também é uma estimativa.
+    </p>
+  `;
+
+  const anchor = $("dashboard-loans")?.closest(".content-card");
+
+  if (anchor && anchor.parentNode === page) {
+    page.insertBefore(panel, anchor);
+  } else {
+    page.appendChild(panel);
+  }
+}
+
+function renderFinancePanel() {
+  ensureFinancePanel();
+
+  const totals = getFinancialTotals();
+
+  const values = {
+    "finance-capital-lent": totals.capitalLent,
+    "finance-capital-out": totals.capitalStillOut,
+    "finance-received": totals.totalReceived,
+    "finance-receivable": totals.receivable,
+    "finance-profit-received": totals.estimatedProfitReceived,
+    "finance-profit-total": totals.expectedProfit,
+    "finance-profit-pending": totals.profitStillExpected,
+    "finance-expenses": totals.expensesTotal,
+    "finance-net-profit": totals.estimatedNetProfit
+  };
+
+  Object.entries(values).forEach(([elementId, value]) => {
+    const element = $(elementId);
+
+    if (element) {
+      element.textContent = money(value);
+    }
+  });
+
+  const net = $("finance-net-profit");
+
+  if (net) {
+    net.style.color = totals.estimatedNetProfit < 0
+      ? "var(--danger)"
+      : "var(--success)";
+  }
+}
+
+/* =========================================================
    DATAS E PRAZOS
    ========================================================= */
 
@@ -416,7 +596,6 @@ function setDefaultDates() {
 
 function addDays(dateString, days) {
   const [year, month, day] = dateString.split("-").map(Number);
-
   const date = new Date(year, month - 1, day);
 
   date.setDate(date.getDate() + Number(days));
@@ -507,6 +686,7 @@ function showApp() {
   }
 
   setDefaultDates();
+  ensureFinancePanel();
   renderAll();
   navigate("dashboard");
 }
@@ -569,9 +749,7 @@ function emptyTable(message) {
 }
 
 function table(headers, rows, emptyMessage) {
-  if (!rows.length) {
-    return emptyTable(emptyMessage);
-  }
+  if (!rows.length) return emptyTable(emptyMessage);
 
   return `
     <table>
@@ -647,7 +825,6 @@ function renderCustomers() {
 
 function populateLoanCustomers() {
   const select = $("loan-customer");
-
   if (!select) return;
 
   const previous = select.value;
@@ -742,7 +919,6 @@ function renderLoans() {
 
 function populatePaymentLoans() {
   const select = $("payment-loan");
-
   if (!select) return;
 
   const previous = select.value;
@@ -780,7 +956,7 @@ function populatePaymentLoans() {
 }
 
 /* =========================================================
-   PAGAMENTOS E RECIBOS
+   PAGAMENTOS
    ========================================================= */
 
 function renderPayments() {
@@ -821,25 +997,301 @@ function renderPayments() {
   );
 }
 
+/* =========================================================
+   RECIBO EM TEXTO
+   ========================================================= */
+
 function receiptText(payment) {
   const loan = getLoan(payment.loanId);
   const customer = loan ? getCustomer(loan.customerId) : null;
-  const name = customer?.name || "Cliente";
-  const balance = loan ? loanBalance(loan) : 0;
 
   return [
-    "🧾 *RECIBO DE PAGAMENTO — CREDIFÁCIL*",
+    "RECIBO DE PAGAMENTO — CREDIFÁCIL",
     "",
-    `Cliente: ${name}`,
+    `Cliente: ${customer?.name || "Cliente"}`,
     `Valor recebido: ${money(payment.amount)}`,
     `Data: ${dateBR(payment.date)}`,
     `Referência: ${payment.notes || "Pagamento de empréstimo"}`,
     loan ? `Total do contrato: ${money(loanTotal(loan))}` : "",
     loan ? `Total recebido até agora: ${money(loanReceived(loan.id))}` : "",
-    loan ? `Saldo restante: ${money(balance)}` : "",
+    loan ? `Saldo restante: ${money(loanBalance(loan))}` : "",
     "",
-    "Recibo de registro de pagamento. Guarde esta mensagem para conferência."
+    "Recibo de registro de pagamento. Guarde para conferência."
   ].filter(Boolean).join("\n");
+}
+
+/* =========================================================
+   RECIBO EM IMAGEM
+   ========================================================= */
+
+function ensureReceiptActions() {
+  const content = $("receipt-content");
+  if (!content) return;
+
+  let actions = $("receipt-actions");
+
+  if (!actions) {
+    actions = document.createElement("div");
+    actions.id = "receipt-actions";
+    actions.className = "receipt-actions";
+
+    actions.innerHTML = `
+      <button type="button" class="btn primary" id="receipt-save-image">
+        Salvar comprovante em imagem
+      </button>
+
+      <button type="button" class="btn secondary" id="receipt-share-image">
+        Compartilhar imagem
+      </button>
+
+      <button type="button" class="btn ghost" id="receipt-whatsapp">
+        Enviar mensagem pelo WhatsApp
+      </button>
+
+      <p class="muted small-note" id="receipt-image-status"></p>
+    `;
+
+    content.insertAdjacentElement("afterend", actions);
+
+    on("receipt-save-image", "click", saveReceiptImage);
+    on("receipt-share-image", "click", shareReceiptImage);
+
+    on("receipt-whatsapp", "click", () => {
+      if (!currentReceipt) return;
+
+      const text = encodeURIComponent(receiptText(currentReceipt));
+      window.open(
+        `https://wa.me/?text=${text}`,
+        "_blank",
+        "noopener,noreferrer"
+      );
+    });
+  }
+}
+
+function receiptImageData() {
+  if (!currentReceipt) {
+    throw new Error("Nenhum pagamento selecionado.");
+  }
+
+  const payment = currentReceipt;
+  const loan = getLoan(payment.loanId);
+  const customer = loan ? getCustomer(loan.customerId) : null;
+
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+
+  if (!ctx) {
+    throw new Error("Seu navegador não conseguiu criar a imagem.");
+  }
+
+  const width = 900;
+  const padding = 60;
+  const rowHeight = 67;
+  const rows = [
+    ["Cliente", customer?.name || "Cliente"],
+    ["Valor recebido", money(payment.amount)],
+    ["Data do pagamento", dateBR(payment.date)],
+    ["Referência", payment.notes || "Pagamento de empréstimo"]
+  ];
+
+  if (loan) {
+    rows.push(
+      ["Total do contrato", money(loanTotal(loan))],
+      ["Total recebido", money(loanReceived(loan.id))],
+      ["Saldo restante", money(loanBalance(loan))]
+    );
+  }
+
+  const height = 350 + rows.length * rowHeight + 120;
+
+  canvas.width = width;
+  canvas.height = height;
+
+  ctx.fillStyle = "#f4f7fa";
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.fillStyle = "#087f8c";
+  ctx.fillRect(0, 0, width, 210);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 46px Arial";
+  ctx.fillText("CREDIFÁCIL", padding, 82);
+
+  ctx.font = "26px Arial";
+  ctx.fillText("COMPROVANTE DE PAGAMENTO", padding, 135);
+
+  ctx.font = "20px Arial";
+  ctx.fillText("Guarde esta imagem para sua conferência.", padding, 174);
+
+  const cardY = 240;
+  const cardHeight = height - cardY - 55;
+
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.roundRect(35, cardY, width - 70, cardHeight, 22);
+  ctx.fill();
+
+  let y = cardY + 55;
+
+  rows.forEach(([label, value], index) => {
+    ctx.fillStyle = "#71818a";
+    ctx.font = "23px Arial";
+    ctx.fillText(label, padding, y);
+
+    ctx.fillStyle = index === 1 ? "#087f8c" : "#182b35";
+    ctx.font = index === 1 ? "bold 30px Arial" : "bold 24px Arial";
+
+    const maxWidth = width - padding * 2;
+    let displayValue = String(value);
+
+    while (
+      ctx.measureText(displayValue).width > maxWidth &&
+      displayValue.length > 4
+    ) {
+      displayValue = displayValue.slice(0, -2) + "…";
+    }
+
+    ctx.fillText(displayValue, padding, y + 34);
+
+    ctx.strokeStyle = "#e2e9ed";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(padding, y + 50);
+    ctx.lineTo(width - padding, y + 50);
+    ctx.stroke();
+
+    y += rowHeight;
+  });
+
+  ctx.fillStyle = "#71818a";
+  ctx.font = "18px Arial";
+  ctx.fillText(
+    "Documento de registro. Confira os valores informados.",
+    padding,
+    height - 85
+  );
+
+  ctx.fillStyle = "#087f8c";
+  ctx.font = "bold 20px Arial";
+  ctx.fillText("CrediFácil", padding, height - 48);
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => {
+      if (!blob) {
+        reject(new Error("Não foi possível gerar o arquivo de imagem."));
+        return;
+      }
+
+      resolve(blob);
+    }, "image/png");
+  });
+}
+
+async function saveReceiptImage() {
+  if (!currentReceipt) return;
+
+  const button = $("receipt-save-image");
+  const status = $("receipt-image-status");
+
+  if (button) button.disabled = true;
+
+  try {
+    const blob = await receiptImageData();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `comprovante-credifacil-${currentReceipt.date || today()}.png`;
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+    if (status) {
+      status.textContent =
+        "Imagem gerada. Confira a pasta de downloads do seu aparelho.";
+    }
+  } catch (error) {
+    console.error(error);
+
+    if (status) {
+      status.textContent =
+        "Não foi possível salvar a imagem. Tente novamente.";
+    }
+
+    showMessage("Erro ao gerar o comprovante em imagem.", true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function shareReceiptImage() {
+  if (!currentReceipt) return;
+
+  const button = $("receipt-share-image");
+  const status = $("receipt-image-status");
+
+  if (button) button.disabled = true;
+
+  try {
+    const blob = await receiptImageData();
+
+    const file = new File(
+      [blob],
+      `comprovante-credifacil-${currentReceipt.date || today()}.png`,
+      { type: "image/png" }
+    );
+
+    if (
+      navigator.share &&
+      navigator.canShare &&
+      navigator.canShare({ files: [file] })
+    ) {
+      await navigator.share({
+        files: [file],
+        title: "Comprovante CrediFácil",
+        text: "Comprovante de pagamento."
+      });
+
+      if (status) {
+        status.textContent = "Compartilhamento aberto.";
+      }
+    } else {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download = file.name;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+      if (status) {
+        status.textContent =
+          "Seu navegador não permite compartilhar a imagem diretamente. Ela foi preparada para salvar; depois, anexe-a no WhatsApp.";
+      }
+    }
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      if (status) status.textContent = "Compartilhamento cancelado.";
+    } else {
+      console.error(error);
+
+      if (status) {
+        status.textContent = "Não foi possível compartilhar a imagem.";
+      }
+
+      showMessage("Erro ao compartilhar o comprovante.", true);
+    }
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 function openReceipt(paymentId) {
@@ -862,32 +1314,128 @@ function openReceipt(paymentId) {
 
   $("receipt-content").innerHTML = `
     <div class="receipt">
-      <h2>CrediFácil</h2>
-      <p class="muted">Recibo de pagamento</p>
+      <div class="receipt-brand">
+        <div class="receipt-brand-mark">CF</div>
+        <div>
+          <h2>CrediFácil</h2>
+          <p class="muted">Comprovante de pagamento</p>
+        </div>
+      </div>
+
       <div class="receipt-row">
         <span>Cliente</span>
         <strong>${escapeHTML(customer?.name || "Cliente")}</strong>
       </div>
+
       <div class="receipt-row">
         <span>Valor recebido</span>
         <strong>${money(payment.amount)}</strong>
       </div>
+
       <div class="receipt-row">
         <span>Data</span>
         <strong>${dateBR(payment.date)}</strong>
       </div>
+
       <div class="receipt-row">
         <span>Referência</span>
         <strong>${escapeHTML(payment.notes || "Pagamento")}</strong>
       </div>
-      ${loan ? `<div class="receipt-row"><span>Total do contrato</span><strong>${money(loanTotal(loan))}</strong></div>` : ""}
-      ${loan ? `<div class="receipt-row"><span>Total recebido</span><strong>${money(loanReceived(loan.id))}</strong></div>` : ""}
-      ${loan ? `<div class="receipt-row"><span>Saldo restante</span><strong>${money(loanBalance(loan))}</strong></div>` : ""}
-      <p class="muted small-note">Guarde este recibo para conferência.</p>
+
+      ${loan ? `
+        <div class="receipt-row">
+          <span>Total do contrato</span>
+          <strong>${money(loanTotal(loan))}</strong>
+        </div>
+
+        <div class="receipt-row">
+          <span>Total recebido</span>
+          <strong>${money(loanReceived(loan.id))}</strong>
+        </div>
+
+        <div class="receipt-row">
+          <span>Saldo restante</span>
+          <strong>${money(loanBalance(loan))}</strong>
+        </div>
+      ` : ""}
+
+      <p class="muted small-note">
+        Guarde este comprovante para conferência.
+      </p>
     </div>
   `;
 
+  ensureReceiptActions();
+
+  if ($("receipt-image-status")) {
+    $("receipt-image-status").textContent = "";
+  }
+
   $("receipt-modal").hidden = false;
+}
+
+/* =========================================================
+   EXCLUSÕES
+   ========================================================= */
+
+function deleteCustomer(customerId) {
+  const customer = getCustomer(customerId);
+  if (!customer) return;
+
+  const relatedLoans = ownRecords(KEYS.loans).filter(
+    loan => loan.customerId === customerId
+  );
+
+  if (relatedLoans.length) {
+    return showMessage(
+      "Este cliente tem empréstimos vinculados. Exclua primeiro os empréstimos relacionados.",
+      true
+    );
+  }
+
+  if (!confirm(`Deseja excluir o cliente "${customer.name}"?`)) return;
+
+  replaceOwn(
+    KEYS.customers,
+    ownRecords(KEYS.customers).filter(
+      item => item.id !== customerId
+    )
+  );
+
+  renderAll();
+  showMessage("Cliente excluído.");
+}
+
+function deleteLoan(loanId) {
+  const loan = getLoan(loanId);
+  if (!loan) return;
+
+  const relatedPayments = getPayments(loanId);
+
+  let message = `Excluir o empréstimo de ${customerName(loan.customerId)}?`;
+
+  if (relatedPayments.length) {
+    message += "\n\nOs pagamentos relacionados também serão excluídos do histórico.";
+  }
+
+  if (!confirm(message)) return;
+
+  replaceOwn(
+    KEYS.payments,
+    ownRecords(KEYS.payments).filter(
+      payment => payment.loanId !== loanId
+    )
+  );
+
+  replaceOwn(
+    KEYS.loans,
+    ownRecords(KEYS.loans).filter(
+      item => item.id !== loanId
+    )
+  );
+
+  renderAll();
+  showMessage("Empréstimo excluído.");
 }
 
 function deletePayment(paymentId) {
@@ -901,7 +1449,7 @@ function deletePayment(paymentId) {
 
   const confirmText =
     `Excluir o pagamento de ${money(payment.amount)} registrado em ${dateBR(payment.date)}?\n\n` +
-    "O saldo do empréstimo será recalculado automaticamente.";
+    "O saldo e os cálculos financeiros serão atualizados.";
 
   if (!confirm(confirmText)) return;
 
@@ -913,7 +1461,29 @@ function deletePayment(paymentId) {
   );
 
   renderAll();
-  showMessage("Pagamento excluído. O saldo e o histórico foram atualizados.");
+  showMessage("Pagamento excluído. Os valores foram atualizados.");
+}
+
+function deleteExpense(expenseId) {
+  const expense = ownRecords(KEYS.expenses).find(
+    item => item.id === expenseId
+  );
+
+  if (!expense) return;
+
+  if (!confirm(
+    `Excluir a despesa "${expense.description}" de ${money(expense.amount)}?`
+  )) return;
+
+  replaceOwn(
+    KEYS.expenses,
+    ownRecords(KEYS.expenses).filter(
+      item => item.id !== expenseId
+    )
+  );
+
+  renderAll();
+  showMessage("Despesa excluída.");
 }
 
 /* =========================================================
@@ -956,7 +1526,7 @@ function renderExpenses() {
 }
 
 /* =========================================================
-   PAINEL
+   PAINEL PRINCIPAL
    ========================================================= */
 
 function renderDashboard() {
@@ -1049,6 +1619,8 @@ function renderDashboard() {
       "Nenhum pagamento registrado."
     );
   }
+
+  renderFinancePanel();
 }
 
 /* =========================================================
@@ -1137,104 +1709,14 @@ function renderHistory() {
 function renderAll() {
   if (!currentUser) return;
 
+  ensureFinancePanel();
+
   renderCustomers();
   renderLoans();
   renderPayments();
   renderExpenses();
   renderDashboard();
   renderHistory();
-}
-
-/* =========================================================
-   EXCLUSÕES
-   ========================================================= */
-
-function deleteCustomer(customerId) {
-  const customer = getCustomer(customerId);
-
-  if (!customer) return;
-
-  const relatedLoans = ownRecords(KEYS.loans).filter(
-    loan => loan.customerId === customerId
-  );
-
-  if (relatedLoans.length) {
-    return showMessage(
-      "Este cliente tem empréstimos vinculados. Exclua primeiro os empréstimos relacionados.",
-      true
-    );
-  }
-
-  if (!confirm(`Deseja excluir o cliente "${customer.name}"?`)) {
-    return;
-  }
-
-  replaceOwn(
-    KEYS.customers,
-    ownRecords(KEYS.customers).filter(
-      item => item.id !== customerId
-    )
-  );
-
-  renderAll();
-  showMessage("Cliente excluído.");
-}
-
-function deleteLoan(loanId) {
-  const loan = getLoan(loanId);
-
-  if (!loan) return;
-
-  const relatedPayments = getPayments(loanId);
-
-  let message = `Excluir o empréstimo de ${customerName(loan.customerId)}?`;
-
-  if (relatedPayments.length) {
-    message += "\n\nOs pagamentos relacionados também serão excluídos do histórico.";
-  }
-
-  if (!confirm(message)) return;
-
-  replaceOwn(
-    KEYS.payments,
-    ownRecords(KEYS.payments).filter(
-      payment => payment.loanId !== loanId
-    )
-  );
-
-  replaceOwn(
-    KEYS.loans,
-    ownRecords(KEYS.loans).filter(
-      item => item.id !== loanId
-    )
-  );
-
-  renderAll();
-  showMessage("Empréstimo excluído.");
-}
-
-function deleteExpense(expenseId) {
-  const expense = ownRecords(KEYS.expenses).find(
-    item => item.id === expenseId
-  );
-
-  if (!expense) return;
-
-  if (!confirm(
-    `Excluir a despesa "${expense.description}" de ${money(expense.amount)}?`
-  )) {
-    return;
-  }
-
-  replaceOwn(
-    KEYS.expenses,
-    ownRecords(KEYS.expenses).filter(
-      item => item.id !== expenseId
-    )
-  );
-
-  renderAll();
-  showMessage("Despesa excluída.");
 }
 
 /* =========================================================
@@ -1248,11 +1730,7 @@ on("login-form", "submit", async event => {
   const password = $("login-password")?.value || "";
 
   if (!email || !password) {
-    return showMessage(
-      "Informe seu e-mail e sua senha.",
-      true,
-      true
-    );
+    return showMessage("Informe seu e-mail e sua senha.", true, true);
   }
 
   const users = read(KEYS.users);
@@ -1273,15 +1751,10 @@ on("login-form", "submit", async event => {
   const storedHash = user.passwordHash ?? user.password;
 
   if (storedHash !== hashed && storedHash !== password) {
-    return showMessage(
-      "E-mail ou senha incorretos.",
-      true,
-      true
-    );
+    return showMessage("E-mail ou senha incorretos.", true, true);
   }
 
   currentUser = user;
-
   saveLastEmail(email);
 
   try {
@@ -1292,7 +1765,7 @@ on("login-form", "submit", async event => {
         startedAt: new Date().toISOString()
       })
     );
-  } catch (error) {
+  } catch {
     currentUser = null;
 
     return showMessage(
@@ -1318,19 +1791,11 @@ on("register-form", "submit", async event => {
   const password = $("register-password")?.value || "";
 
   if (name.length < 2) {
-    return showMessage(
-      "Informe seu nome completo.",
-      true,
-      true
-    );
+    return showMessage("Informe seu nome completo.", true, true);
   }
 
   if (!email || !email.includes("@") || !email.includes(".")) {
-    return showMessage(
-      "Informe um e-mail válido.",
-      true,
-      true
-    );
+    return showMessage("Informe um e-mail válido.", true, true);
   }
 
   if (password.length < 4) {
@@ -1375,7 +1840,7 @@ on("register-form", "submit", async event => {
         startedAt: new Date().toISOString()
       })
     );
-  } catch (error) {
+  } catch {
     currentUser = null;
 
     return showMessage(
@@ -1418,11 +1883,8 @@ on("customer-form", "submit", event => {
   };
 
   try {
-    save(
-      KEYS.customers,
-      [...read(KEYS.customers), customer]
-    );
-  } catch (error) {
+    save(KEYS.customers, [...read(KEYS.customers), customer]);
+  } catch {
     return showMessage(
       "Não foi possível salvar o cliente. Verifique o espaço disponível.",
       true
@@ -1494,11 +1956,8 @@ on("loan-form", "submit", event => {
 
   try {
     save(KEYS.loans, [...read(KEYS.loans), loan]);
-  } catch (error) {
-    return showMessage(
-      "Não foi possível salvar o empréstimo.",
-      true
-    );
+  } catch {
+    return showMessage("Não foi possível salvar o empréstimo.", true);
   }
 
   $("loan-form").reset();
@@ -1562,15 +2021,9 @@ on("payment-form", "submit", event => {
   };
 
   try {
-    save(
-      KEYS.payments,
-      [...read(KEYS.payments), payment]
-    );
-  } catch (error) {
-    return showMessage(
-      "Não foi possível salvar o pagamento.",
-      true
-    );
+    save(KEYS.payments, [...read(KEYS.payments), payment]);
+  } catch {
+    return showMessage("Não foi possível salvar o pagamento.", true);
   }
 
   $("payment-form").reset();
@@ -1586,9 +2039,7 @@ on("payment-form", "submit", event => {
   renderAll();
   openReceipt(payment.id);
 
-  showMessage(
-    "Pagamento registrado. Confira o recibo para compartilhar."
-  );
+  showMessage("Pagamento registrado. Confira o comprovante.");
 });
 
 /* =========================================================
@@ -1624,15 +2075,9 @@ on("expense-form", "submit", event => {
   };
 
   try {
-    save(
-      KEYS.expenses,
-      [...read(KEYS.expenses), expense]
-    );
-  } catch (error) {
-    return showMessage(
-      "Não foi possível salvar a despesa.",
-      true
-    );
+    save(KEYS.expenses, [...read(KEYS.expenses), expense]);
+  } catch {
+    return showMessage("Não foi possível salvar a despesa.", true);
   }
 
   $("expense-form").reset();
@@ -1771,49 +2216,32 @@ on("receipt-modal", "click", event => {
 });
 
 /* =========================================================
-   COMPARTILHAR RECIBO PELO WHATSAPP
-   ========================================================= */
-
-on("receipt-whatsapp", "click", () => {
-  if (!currentReceipt) return;
-
-  const text = encodeURIComponent(receiptText(currentReceipt));
-  const url = `https://wa.me/?text=${text}`;
-
-  window.open(url, "_blank", "noopener,noreferrer");
-});
-
-/* =========================================================
    PROTEGER A SESSÃO AO VOLTAR PARA O APLICATIVO
    ========================================================= */
 
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") {
-    const now = new Date();
+  if (document.visibilityState !== "visible") return;
 
-    if (
-      currentUser &&
-      now.getHours() >= 23 &&
-      (() => {
-        try {
-          return localStorage.getItem(KEYS.logoutDay) !== today();
-        } catch {
-          return true;
-        }
-      })()
-    ) {
-      try {
-        localStorage.setItem(KEYS.logoutDay, today());
-      } catch {}
+  const now = new Date();
 
-      logout();
+  let logoutDay = "";
 
-      showMessage(
-        "Sua sessão foi encerrada às 23h. Entre novamente no Credifácil.",
-        false,
-        true
-      );
-    }
+  try {
+    logoutDay = localStorage.getItem(KEYS.logoutDay) || "";
+  } catch {}
+
+  if (currentUser && now.getHours() >= 23 && logoutDay !== today()) {
+    try {
+      localStorage.setItem(KEYS.logoutDay, today());
+    } catch {}
+
+    logout();
+
+    showMessage(
+      "Sua sessão foi encerrada às 23h. Entre novamente no Credifácil.",
+      false,
+      true
+    );
   }
 });
 
@@ -1824,6 +2252,7 @@ document.addEventListener("visibilitychange", () => {
 function init() {
   restoreLastEmail();
   setDefaultDates();
+  ensureFinancePanel();
   checkSessionAtStartup();
 }
 
