@@ -1,201 +1,167 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#14213d">
+  <meta name="theme-color" content="#087f9c">
   <meta name="description" content="Sistema administrativo de controle financeiro e empréstimos">
-  <title>Listo.dvx</title>
+  <title>CrediFácil — Controle financeiro</title>
   <link rel="stylesheet" href="./index.css">
+  <script src="./main.js" defer></script>
 </head>
 <body>
-  <header>
-    <h1>Controle de Empréstimos</h1>
-  </header>
+  <div class="app">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="CrediFácil início">
+        <span class="brand-mark">✓</span>
+        <span class="brand-copy">Credi<span>Fácil</span><small>GESTÃO DE CRÉDITOS</small></span>
+      </a>
+      <div class="topbar-right">
+        <span id="header-date" class="header-date"></span>
+        <span class="avatar" id="user-avatar">CF</span>
+      </div>
+    </header>
 
-  <main>
-    <section id="login-screen">
-      <h2>Login</h2>
-      <form id="login-form">
-        <label for="login-email">E-mail</label>
-        <input id="login-email" type="email" placeholder="Digite seu e-mail" autocomplete="username" required>
-
-        <label for="login-password">Senha</label>
-        <input id="login-password" type="password" placeholder="Digite sua senha" autocomplete="current-password" required>
-
-        <button type="submit">Entrar</button>
-        <p id="login-error" role="alert"></p>
-      </form>
-
-      <p>Ainda não possui conta?
-        <button type="button" id="show-register">Cadastre-se</button>
-      </p>
-    </section>
-
-    <section id="register-screen" hidden>
-      <h2>Cadastro de administrador</h2>
-      <form id="register-form">
-        <label for="register-name">Nome</label>
-        <input id="register-name" type="text" placeholder="Seu nome" autocomplete="name" required>
-
-        <label for="register-email">E-mail</label>
-        <input id="register-email" type="email" placeholder="Seu e-mail" autocomplete="email" required>
-
-        <label for="register-password">Senha</label>
-        <input id="register-password" type="password" placeholder="Crie uma senha" autocomplete="new-password" minlength="8" required>
-
-        <button type="submit">Cadastrar</button>
-        <p id="register-error" role="alert"></p>
-      </form>
-
-      <p>Já possui uma conta?
-        <button type="button" id="show-login">Voltar para o login</button>
-      </p>
-    </section>
-
-    <section id="app-shell" hidden>
-      <nav aria-label="Menu principal">
-        <button type="button" data-page="dashboard">Painel</button>
-        <button type="button" data-page="customers">Clientes</button>
-        <button type="button" data-page="installments">Parcelas</button>
-        <button type="button" data-page="expenses">Gastos</button>
-        <button type="button" data-page="history">Histórico</button>
-      </nav>
-
-      <section id="page-dashboard" class="page">
-        <h2>Painel financeiro</h2>
-        <p>Resumo da operação</p>
-
-        <article>
-          <h3>Total emprestado</h3>
-          <p id="total-loaned">R$ 0,00</p>
-        </article>
-
-        <article>
-          <h3>Total recebido</h3>
-          <p id="total-received">R$ 0,00</p>
-        </article>
-
-        <article>
-          <h3>Total pendente</h3>
-          <p id="total-pending">R$ 0,00</p>
-        </article>
-
-        <article>
-          <h3>Clientes cadastrados</h3>
-          <p id="total-customers">0</p>
-        </article>
-      </section>
-
-      <section id="page-customers" class="page" hidden>
-        <h2>Cadastro de clientes</h2>
-
-        <form id="customer-form">
-          <label for="customer-name">Nome completo</label>
-          <input id="customer-name" type="text" required>
-
-          <label for="customer-phone">Telefone</label>
-          <input id="customer-phone" type="tel" autocomplete="tel" required>
-
-          <label for="customer-location">Localização</label>
-          <input id="customer-location" type="text" placeholder="Cidade ou endereço">
-
-          <label for="customer-document">Documento de identidade</label>
-          <input id="customer-document" type="text" autocomplete="off">
-
-          <button type="submit">Cadastrar cliente</button>
-        </form>
-
-        <h3>Lista de clientes</h3>
-        <input id="customer-search" type="search" placeholder="Pesquisar cliente">
-
-        <div class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>Nome</th>
-                <th>Telefone</th>
-                <th>Localização</th>
-                <th>Ações</th>
-              </tr>
-            </thead>
-            <tbody id="customer-list"></tbody>
-          </table>
+    <main class="main-content">
+      <section id="login-screen" class="auth-layout">
+        <div class="auth-intro">
+          <span class="eyebrow">CONTROLE FINANCEIRO SIMPLES</span>
+          <h1>Seu negócio<br><span>em boas mãos.</span></h1>
+          <p>Acompanhe clientes, empréstimos, pagamentos e gastos em um só lugar.</p>
+          <div class="auth-points"><span>✓ Dados organizados</span><span>✓ Resumo financeiro</span><span>✓ Acesso simples</span></div>
+        </div>
+        <div class="auth-card">
+          <div class="auth-heading"><span class="auth-icon">↗</span><div><h2>Bem-vindo de volta</h2><p>Entre na sua conta para continuar.</p></div></div>
+          <form id="login-form">
+            <label for="login-email">E-mail</label>
+            <input id="login-email" type="email" placeholder="voce@exemplo.com" autocomplete="username" required>
+            <label for="login-password">Senha</label>
+            <input id="login-password" type="password" placeholder="Sua senha" autocomplete="current-password" required>
+            <button class="btn btn-primary btn-block" type="submit">Entrar na conta <span>→</span></button>
+            <p id="login-error" class="form-error" role="alert"></p>
+          </form>
+          <p class="auth-switch">Ainda não tem conta? <button type="button" id="show-register" class="link-button">Cadastre-se</button></p>
         </div>
       </section>
 
-      <section id="page-installments" class="page" hidden>
-        <h2>Novo empréstimo</h2>
-
-        <form id="loan-form">
-          <label for="loan-customer">Cliente</label>
-          <select id="loan-customer" required>
-            <option value="">Selecione um cliente</option>
-          </select>
-
-          <label for="loan-amount">Valor emprestado (R$)</label>
-          <input id="loan-amount" type="number" min="0.01" step="0.01" required>
-
-          <label for="loan-interest">Juros (%)</label>
-          <select id="loan-interest" required>
-            <option value="0">0%</option>
-            <option value="10">10%</option>
-            <option value="20">20%</option>
-            <option value="30">30%</option>
-            <option value="40">40%</option>
-            <option value="50">50%</option>
-          </select>
-
-          <label for="loan-date">Data do empréstimo</label>
-          <input id="loan-date" type="date" required>
-
-          <label for="loan-due-date">Data de vencimento</label>
-          <input id="loan-due-date" type="date" required>
-
-          <label for="loan-notes">Observações</label>
-          <textarea id="loan-notes" rows="3"></textarea>
-
-          <p>Total calculado: <strong id="loan-total">R$ 0,00</strong></p>
-          <button type="submit">Registrar empréstimo</button>
-        </form>
-
-        <h3>Empréstimos registrados</h3>
-        <div id="loan-list"></div>
+      <section id="register-screen" class="auth-layout" hidden>
+        <div class="auth-intro">
+          <span class="eyebrow">COMECE POR AQUI</span>
+          <h1>Organize tudo<br><span>com facilidade.</span></h1>
+          <p>Crie uma conta de administrador para testar o controle da sua carteira.</p>
+        </div>
+        <div class="auth-card">
+          <div class="auth-heading"><span class="auth-icon">＋</span><div><h2>Criar administrador</h2><p>Preencha os dados abaixo.</p></div></div>
+          <form id="register-form">
+            <label for="register-name">Nome completo</label>
+            <input id="register-name" type="text" placeholder="Seu nome" autocomplete="name" required>
+            <label for="register-email">E-mail</label>
+            <input id="register-email" type="email" placeholder="voce@exemplo.com" autocomplete="email" required>
+            <label for="register-password">Senha</label>
+            <input id="register-password" type="password" placeholder="Mínimo de 8 caracteres" autocomplete="new-password" minlength="8" required>
+            <button class="btn btn-primary btn-block" type="submit">Criar conta <span>→</span></button>
+            <p id="register-error" class="form-error" role="alert"></p>
+          </form>
+          <p class="auth-switch">Já possui uma conta? <button type="button" id="show-login" class="link-button">Voltar ao login</button></p>
+        </div>
       </section>
 
-      <section id="page-expenses" class="page" hidden>
-        <h2>Gastos</h2>
+      <section id="app-shell" hidden>
+        <div class="app-layout">
+          <aside class="sidebar">
+            <div class="sidebar-label">MENU PRINCIPAL</div>
+            <nav aria-label="Menu principal">
+              <button type="button" data-page="dashboard" class="nav-item active"><span>▦</span> Painel principal</button>
+              <button type="button" data-page="customers" class="nav-item"><span>♙</span> Clientes</button>
+              <button type="button" data-page="installments" class="nav-item"><span>▤</span> Empréstimos</button>
+              <button type="button" data-page="expenses" class="nav-item"><span>↘</span> Gastos</button>
+              <button type="button" data-page="history" class="nav-item"><span>◷</span> Histórico</button>
+            </nav>
+            <div class="sidebar-help"><span class="help-mark">?</span><div><b>Seu controle, simplificado</b><small>Tenha tudo em ordem.</small></div></div>
+            <button type="button" id="logout-button" class="logout-button">↪ <span>Sair da conta</span></button>
+          </aside>
 
-        <form id="expense-form">
-          <label for="expense-description">Descrição</label>
-          <input id="expense-description" type="text" required>
+          <div class="workspace">
+            <div id="app-notice" class="notice" role="status" hidden></div>
 
-          <label for="expense-amount">Valor (R$)</label>
-          <input id="expense-amount" type="number" min="0.01" step="0.01" required>
+            <section id="page-dashboard" class="page">
+              <div class="page-heading"><div><span class="eyebrow">VISÃO GERAL</span><h1>Painel principal</h1><p>Acompanhe os números do seu negócio.</p></div><button class="btn btn-primary" type="button" data-open-page="installments">＋ Novo empréstimo</button></div>
+              <div class="welcome-banner"><div><span class="banner-tag">GESTÃO MAIS FÁCIL</span><h2>Olá! Vamos cuidar<br>dos seus resultados.</h2><p>Confira o resumo da sua carteira financeira.</p></div><div class="banner-illustration" aria-hidden="true"><div class="banner-circle">R$</div><div class="banner-note">↗<br><b>Controle<br>em dia</b></div></div></div>
+              <div class="stats-grid">
+                <article class="stat-card"><div class="stat-label">Total emprestado <span class="stat-icon blue">↗</span></div><strong id="total-loaned">R$ 0,00</strong><small>Valor original dos empréstimos</small></article>
+                <article class="stat-card"><div class="stat-label">Total recebido <span class="stat-icon teal">✓</span></div><strong id="total-received">R$ 0,00</strong><small>Pagamentos registrados</small></article>
+                <article class="stat-card"><div class="stat-label">Total pendente <span class="stat-icon amber">◷</span></div><strong id="total-pending">R$ 0,00</strong><small>Saldo que falta receber</small></article>
+                <article class="stat-card"><div class="stat-label">Clientes <span class="stat-icon violet">♙</span></div><strong id="total-customers">0</strong><small>Clientes cadastrados</small></article>
+              </div>
+              <div class="dashboard-grid">
+                <article class="panel"><div class="panel-heading"><div><h2>Empréstimos recentes</h2><p>Últimos contratos registrados</p></div><button type="button" class="text-button" data-open-page="installments">Ver todos →</button></div><div id="dashboard-recent" class="recent-list"><p class="empty-state">Nenhum empréstimo registrado.</p></div></article>
+                <article class="panel"><div class="panel-heading"><div><h2>Acesso rápido</h2><p>Escolha uma ação</p></div></div>
+                  <button type="button" class="quick-action" data-open-page="customers"><span class="quick-icon">♙</span><span><b>Cadastrar cliente</b><small>Adicione um novo cliente</small></span><span class="quick-arrow">›</span></button>
+                  <button type="button" class="quick-action" data-open-page="installments"><span class="quick-icon">＋</span><span><b>Novo empréstimo</b><small>Registre um contrato</small></span><span class="quick-arrow">›</span></button>
+                  <button type="button" class="quick-action" data-open-page="expenses"><span class="quick-icon">↘</span><span><b>Registrar gasto</b><small>Controle suas despesas</small></span><span class="quick-arrow">›</span></button>
+                </article>
+              </div>
+            </section>
 
-          <label for="expense-date">Data</label>
-          <input id="expense-date" type="date" required>
+            <section id="page-customers" class="page" hidden>
+              <div class="page-heading"><div><span class="eyebrow">SUA CARTEIRA</span><h1>Clientes</h1><p>Cadastre e encontre seus clientes facilmente.</p></div></div>
+              <div class="section-grid">
+                <article class="panel"><div class="panel-heading"><div><h2>Novo cliente</h2><p>Preencha as informações</p></div></div>
+                  <form id="customer-form" class="form-grid">
+                    <div class="field full"><label for="customer-name">Nome completo *</label><input id="customer-name" type="text" placeholder="Nome do cliente" required></div>
+                    <div class="field"><label for="customer-phone">Telefone *</label><input id="customer-phone" type="tel" placeholder="(00) 00000-0000" autocomplete="tel" required></div>
+                    <div class="field"><label for="customer-location">Localização</label><input id="customer-location" type="text" placeholder="Cidade ou bairro"></div>
+                    <div class="field full"><label for="customer-document">Documento de identidade</label><input id="customer-document" type="text" autocomplete="off" placeholder="Opcional"></div>
+                    <div class="field full"><button class="btn btn-primary btn-block" type="submit">＋ Cadastrar cliente</button></div>
+                  </form>
+                </article>
+                <article class="panel"><div class="panel-heading"><div><h2>Lista de clientes</h2><p id="customer-count">Clientes cadastrados</p></div></div><input id="customer-search" class="search-input" type="search" placeholder="⌕  Pesquisar por nome, telefone..."><div class="table-container"><table><thead><tr><th>Cliente</th><th>Telefone</th><th>Localização</th><th>Ações</th></tr></thead><tbody id="customer-list"></tbody></table></div></article>
+              </div>
+            </section>
 
-          <button type="submit">Registrar gasto</button>
-        </form>
+            <section id="page-installments" class="page" hidden>
+              <div class="page-heading"><div><span class="eyebrow">CARTEIRA DE CRÉDITO</span><h1>Empréstimos</h1><p>Registre contratos e acompanhe os saldos.</p></div></div>
+              <div class="section-grid">
+                <article class="panel"><div class="panel-heading"><div><h2>Novo empréstimo</h2><p>Preencha os dados do contrato</p></div></div>
+                  <form id="loan-form" class="form-grid">
+                    <div class="field full"><label for="loan-customer">Cliente *</label><select id="loan-customer" required><option value="">Selecione um cliente</option></select></div>
+                    <div class="field"><label for="loan-amount">Valor emprestado (R$) *</label><input id="loan-amount" type="number" min="0.01" step="0.01" placeholder="1000,00" required></div>
+                    <div class="field"><label for="loan-interest">Juros (%)</label><input id="loan-interest" type="number" min="0" step="0.01" value="0"></div>
+                    <div class="field"><label for="loan-date">Data do empréstimo *</label><input id="loan-date" type="date" required></div>
+                    <div class="field"><label for="loan-due-date">Data de vencimento *</label><input id="loan-due-date" type="date" required></div>
+                    <div class="field full"><label for="loan-notes">Observações</label><textarea id="loan-notes" rows="3" placeholder="Informações opcionais"></textarea></div>
+                    <div class="field full loan-total-preview"><span>Total previsto com juros</span><strong id="loan-total-preview">R$ 0,00</strong></div>
+                    <div class="field full"><button class="btn btn-primary btn-block" type="submit">＋ Registrar empréstimo</button></div>
+                  </form>
+                </article>
+                <article class="panel"><div class="panel-heading"><div><h2>Contratos registrados</h2><p>Acompanhe pagamentos e saldos</p></div></div><div id="loan-list" class="loan-list"><p class="empty-state">Nenhum empréstimo registrado.</p></div></article>
+              </div>
+            </section>
 
-        <div id="expense-list"></div>
+            <section id="page-expenses" class="page" hidden>
+              <div class="page-heading"><div><span class="eyebrow">CONTROLE DE SAÍDAS</span><h1>Gastos</h1><p>Registre as despesas do seu negócio.</p></div></div>
+              <div class="section-grid">
+                <article class="panel"><div class="panel-heading"><div><h2>Novo gasto</h2><p>Informe os detalhes da despesa</p></div></div>
+                  <form id="expense-form" class="form-grid">
+                    <div class="field full"><label for="expense-description">Descrição *</label><input id="expense-description" type="text" placeholder="Ex.: transporte, material..." required></div>
+                    <div class="field"><label for="expense-amount">Valor (R$) *</label><input id="expense-amount" type="number" min="0.01" step="0.01" placeholder="50,00" required></div>
+                    <div class="field"><label for="expense-date">Data *</label><input id="expense-date" type="date" required></div>
+                    <div class="field full"><button class="btn btn-primary btn-block" type="submit">＋ Registrar gasto</button></div>
+                  </form>
+                </article>
+                <article class="panel"><div class="panel-heading"><div><h2>Gastos registrados</h2><p>Despesas cadastradas</p></div></div><div id="expense-list" class="expense-list"><p class="empty-state">Nenhum gasto registrado.</p></div></article>
+              </div>
+            </section>
+
+            <section id="page-history" class="page" hidden>
+              <div class="page-heading"><div><span class="eyebrow">MOVIMENTAÇÕES</span><h1>Histórico</h1><p>Consulte empréstimos, recebimentos e gastos.</p></div></div>
+              <article class="panel"><div class="panel-heading"><div><h2>Histórico financeiro</h2><p>Movimentações mais recentes primeiro</p></div></div><div id="history-list"><p class="empty-state">Nenhuma movimentação registrada.</p></div></article>
+            </section>
+          </div>
+        </div>
       </section>
-
-      <section id="page-history" class="page" hidden>
-        <h2>Histórico financeiro</h2>
-        <div id="history-list"></div>
-      </section>
-
-      <button type="button" id="logout-button">Sair da conta</button>
-    </section>
-  </main>
-
-  <footer>
-    <p>Controle de Empréstimos</p>
-  </footer>
-
-  <script src="./main.js" defer></script>
+    </main>
+    <footer class="footer"><span>CrediFácil</span> · Controle financeiro simples</footer>
+  </div>
 </body>
 </html>
