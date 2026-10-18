@@ -5,7 +5,8 @@
    CREDIFÁCIL — CONTROLE FINANCEIRO
    Cadastro, login, clientes, empréstimos, parcelas,
    pagamentos, correções, recibos PNG, gastos e histórico.
-   Armazenamento local separado por conta.
+   Cobrança: segunda a sábado, inclusive feriados.
+   Fechamento diário às 23h e recuperação ao reabrir.
    ========================================================= */
 
 const $ = id => document.getElementById(id);
@@ -16,11 +17,13 @@ const KEYS = {
   customers: "ce_customers_v1",
   loans: "ce_loans_v1",
   expenses: "ce_expenses_v1",
-  payments: "ce_payments_v1"
+  payments: "ce_payments_v1",
+  dailyClosures: "ce_daily_closures_v1"
 };
 
 let noticeTimeout = null;
 let manualInstallment = false;
+let dailyTimer = null;
 
 function read(key, fallback = []) {
   try {
@@ -51,8 +54,11 @@ function makeId() {
 
 function escapeHTML(value = "") {
   return String(value).replace(/[&<>"']/g, char => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;",
-    '"': "&quot;", "'": "&#39;"
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
   })[char]);
 }
 
@@ -65,7 +71,9 @@ function money(value) {
 
 function formatDate(value) {
   if (!value) return "—";
+
   const parts = String(value).split("-");
+
   return parts.length === 3
     ? `${parts[2]}/${parts[1]}/${parts[0]}`
     : value;
@@ -82,6 +90,7 @@ function showNotice(message, error = false) {
   if (!element) return;
 
   clearTimeout(noticeTimeout);
+
   element.textContent = message;
   element.classList.toggle("error", error);
   element.hidden = false;
@@ -117,6 +126,7 @@ function saveMyRows(key, rows) {
   }
 
   const all = read(key, []);
+
   return write(key, [
     ...all.filter(row => row.userId !== user.id),
     ...rows
@@ -148,6 +158,7 @@ function showPage(page) {
 
   document.querySelectorAll("[data-page]").forEach(button => {
     const active = button.dataset.page === page;
+
     button.classList.toggle("active", active);
 
     if (active) button.setAttribute("aria-current", "page");
@@ -158,10 +169,12 @@ function showPage(page) {
   const menuButton = $("mobile-menu-toggle");
 
   if (nav) nav.classList.remove("open");
-  if (menuButton) menuButton.setAttribute("aria-expanded", "false");
+
+  if (menuButton) {
+    menuButton.setAttribute("aria-expanded", "false");
+  }
 
   if (page === "dashboard") renderDashboard();
-
   if (page === "customers") renderCustomers();
 
   if (page === "installments") {
@@ -202,14 +215,18 @@ async function register(event) {
   error.textContent = "";
 
   if (!name || !email || password.length < 8) {
-    error.textContent = "Preencha os campos e use uma senha de pelo menos 8 caracteres.";
+    error.textContent =
+      "Preencha os campos e use uma senha de pelo menos 8 caracteres.";
     return;
   }
 
   const users = read(KEYS.users, []);
 
-  if (users.some(user => String(user.email).toLowerCase() === email)) {
-    error.textContent = "Este e-mail já está cadastrado neste navegador.";
+  if (users.some(user =>
+    String(user.email).toLowerCase() === email
+  )) {
+    error.textContent =
+      "Este e-mail já está cadastrado neste navegador.";
     return;
   }
 
@@ -219,7 +236,8 @@ async function register(event) {
     passwordDigest = await hashPassword(password);
   } catch (exception) {
     console.error(exception);
-    error.textContent = "Não foi possível processar a senha. Tente novamente.";
+    error.textContent =
+      "Não foi possível processar a senha. Tente novamente.";
     return;
   }
 
@@ -237,11 +255,13 @@ async function register(event) {
   }
 
   if (!write(KEYS.session, { userId: user.id })) {
-    error.textContent = "Conta criada. Entre novamente para iniciar a sessão.";
+    error.textContent =
+      "Conta criada. Entre novamente para iniciar a sessão.";
     return;
   }
 
   $("register-form").reset();
+
   enterApp();
   showNotice("Conta criada com sucesso!");
 }
@@ -274,7 +294,8 @@ async function login(event) {
   );
 
   if (!user) {
-    error.textContent = "E-mail ou senha incorretos. Confira os dados cadastrados.";
+    error.textContent =
+      "E-mail ou senha incorretos. Confira os dados cadastrados.";
     return;
   }
 
@@ -284,6 +305,7 @@ async function login(event) {
   }
 
   $("login-form").reset();
+
   enterApp();
   showNotice("Bem-vindo(a), " + user.name + "!");
 }
@@ -299,14 +321,21 @@ function enterApp() {
   showScreen("app");
 
   $("user-avatar").textContent = user.name.trim()
-    .split(/\s+/).slice(0, 2)
-    .map(part => part[0]).join("").toUpperCase() || "CF";
+    .split(/\s+/)
+    .slice(0, 2)
+    .map(part => part[0])
+    .join("")
+    .toUpperCase() || "CF";
 
+  processDailyClosures();
   renderAll();
   showPage("dashboard");
+  startDailyTimer();
 }
 
 function logout() {
+  stopDailyTimer();
+
   try {
     localStorage.removeItem(KEYS.session);
   } catch (error) {
@@ -347,9 +376,11 @@ function addCustomer(event) {
   if (!saveMyRows(KEYS.customers, customers)) return;
 
   $("customer-form").reset();
+
   renderCustomers();
   renderCustomerOptions();
   renderDashboard();
+
   showNotice("Cliente cadastrado com sucesso.");
 }
 
@@ -359,18 +390,37 @@ function customerLoanStatus(customerId) {
   );
 
   if (!loans.length) {
-    return { label: "Novo", className: "status-attention", color: "violet" };
+    return {
+      label: "Novo",
+      className: "status-attention",
+      color: "violet"
+    };
   }
 
   if (loans.every(loan => balanceForLoan(loan) <= 0)) {
-    return { label: "Quitado", className: "status status-paid", color: "green" };
+    return {
+      label: "Quitado",
+      className: "status status-paid",
+      color: "green"
+    };
   }
 
-  if (loans.some(loan => balanceForLoan(loan) > 0 && loan.dueDate < today())) {
-    return { label: "Atrasado", className: "status status-overdue", color: "red" };
+  if (loans.some(loan =>
+    balanceForLoan(loan) > 0 &&
+    makeSchedule(loan).some(date => date < today())
+  )) {
+    return {
+      label: "Atrasado",
+      className: "status status-overdue",
+      color: "red"
+    };
   }
 
-  return { label: "Em dia", className: "status status-pending", color: "amber" };
+  return {
+    label: "Em dia",
+    className: "status status-pending",
+    color: "amber"
+  };
 }
 
 function renderCustomers() {
@@ -383,7 +433,8 @@ function renderCustomers() {
   const customers = allCustomers
     .filter(customer =>
       `${customer.name} ${customer.phone} ${customer.location || ""} ${customer.document || ""}`
-        .toLowerCase().includes(query)
+        .toLowerCase()
+        .includes(query)
     )
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
@@ -392,7 +443,9 @@ function renderCustomers() {
 
   if (!customers.length) {
     tbody.innerHTML = `<tr><td colspan="4" class="empty-state">${
-      query ? "Nenhum cliente encontrado." : "Nenhum cliente cadastrado ainda."
+      query
+        ? "Nenhum cliente encontrado."
+        : "Nenhum cliente cadastrado ainda."
     }</td></tr>`;
     return;
   }
@@ -403,13 +456,19 @@ function renderCustomers() {
     return `
       <tr>
         <td>
-          <strong><span class="customer-dot dot-${status.color}"></span>${escapeHTML(customer.name)}</strong>
+          <strong>
+            <span class="customer-dot dot-${status.color}"></span>
+            ${escapeHTML(customer.name)}
+          </strong>
         </td>
         <td>${escapeHTML(customer.phone)}</td>
         <td>${escapeHTML(customer.location || "—")}</td>
         <td>
           <span class="${status.className}">${status.label}</span>
-          <button type="button" data-delete-customer="${escapeHTML(customer.id)}">Excluir</button>
+          <button type="button"
+            data-delete-customer="${escapeHTML(customer.id)}">
+            Excluir
+          </button>
         </td>
       </tr>
     `;
@@ -417,8 +476,13 @@ function renderCustomers() {
 }
 
 function deleteCustomer(customerId) {
-  if (myRows(KEYS.loans).some(loan => loan.customerId === customerId)) {
-    showNotice("Este cliente possui empréstimos registrados e não pode ser excluído.", true);
+  if (myRows(KEYS.loans).some(
+    loan => loan.customerId === customerId
+  )) {
+    showNotice(
+      "Este cliente possui empréstimos registrados e não pode ser excluído.",
+      true
+    );
     return;
   }
 
@@ -433,6 +497,7 @@ function deleteCustomer(customerId) {
   renderCustomers();
   renderCustomerOptions();
   renderDashboard();
+
   showNotice("Cliente excluído.");
 }
 
@@ -448,7 +513,9 @@ function renderCustomerOptions() {
   select.innerHTML =
     '<option value="">Selecione um cliente</option>' +
     customers.map(customer => `
-      <option value="${escapeHTML(customer.id)}">${escapeHTML(customer.name)}</option>
+      <option value="${escapeHTML(customer.id)}">
+        ${escapeHTML(customer.name)}
+      </option>
     `).join("");
 
   if (customers.some(customer => customer.id === previous)) {
@@ -463,23 +530,19 @@ function installmentCount() {
   const term = Number($("loan-term").value);
 
   if (plan === "weekly") return 3;
+
   return term === 24 ? 24 : 20;
 }
 
 function selectedPlanName(loan) {
   if (loan.plan === "weekly") return "Semanal · 3 semanas";
+
   return `Diário · ${Number(loan.term) || 20} dias`;
 }
 
 function isNationalHoliday(date) {
-  const fixed = [
-    "01-01", "04-21", "05-01", "09-07",
-    "10-12", "11-02", "11-15", "11-20",
-    "12-25"
-  ];
-
-  const monthDay = date.toISOString().slice(5, 10);
-  return fixed.includes(monthDay);
+  // No CrediFácil, feriados têm cobrança normalmente.
+  return false;
 }
 
 function localDateFromString(value) {
@@ -491,6 +554,7 @@ function dateToInput(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
+
   return `${year}-${month}-${day}`;
 }
 
@@ -498,16 +562,48 @@ function nextCollectionDate(date, daysToAdd = 1) {
   const next = new Date(date);
   next.setDate(next.getDate() + daysToAdd);
 
-  while (next.getDay() === 0 || isNationalHoliday(next)) {
+  // Somente domingo é pulado.
+  while (next.getDay() === 0) {
     next.setDate(next.getDate() + 1);
   }
 
   return next;
 }
 
+function isCollectionDay(dateString) {
+  return localDateFromString(dateString).getDay() !== 0;
+}
+
+function nextBusinessDate(dateString) {
+  let date = localDateFromString(dateString);
+
+  do {
+    date.setDate(date.getDate() + 1);
+  } while (date.getDay() === 0);
+
+  return dateToInput(date);
+}
+
+function collectionDateForNow() {
+  const now = new Date();
+  const currentDate = today();
+
+  // Depois das 23h, a lista passa para o próximo dia de cobrança.
+  if (
+    now.getHours() >= 23 ||
+    localDateFromString(currentDate).getDay() === 0
+  ) {
+    return nextBusinessDate(currentDate);
+  }
+
+  return currentDate;
+}
+
 function makeSchedule(loan) {
   const count = Number(loan.installments || (
-    loan.plan === "weekly" ? 3 : Number(loan.term || 20)
+    loan.plan === "weekly"
+      ? 3
+      : Number(loan.term || 20)
   ));
 
   const start = localDateFromString(loan.dueDate || loan.date);
@@ -515,7 +611,7 @@ function makeSchedule(loan) {
   let current = new Date(start);
 
   for (let i = 0; i < count; i++) {
-    while (current.getDay() === 0 || isNationalHoliday(current)) {
+    while (current.getDay() === 0) {
       current.setDate(current.getDate() + 1);
     }
 
@@ -547,6 +643,7 @@ function updateLoanTotal() {
   const total = installment * count;
 
   $("loan-total").textContent = money(total);
+
   $("loan-installment-preview").textContent =
     "Parcela: " + money(installment);
 
@@ -563,9 +660,14 @@ function updateLoanTotal() {
   const plan = $("loan-plan").value;
   const term = $("loan-term");
 
-  term.querySelector('option[value="20"]').disabled = plan === "weekly";
-  term.querySelector('option[value="24"]').disabled = plan === "weekly";
-  term.querySelector('option[value="3"]').disabled = plan !== "weekly";
+  term.querySelector('option[value="20"]').disabled =
+    plan === "weekly";
+
+  term.querySelector('option[value="24"]').disabled =
+    plan === "weekly";
+
+  term.querySelector('option[value="3"]').disabled =
+    plan !== "weekly";
 
   if (plan === "weekly") term.value = "3";
   else if (term.value === "3") term.value = "20";
@@ -578,6 +680,7 @@ function addLoan(event) {
   if (!user) return showScreen("login");
 
   const customerId = $("loan-customer").value;
+
   const customer = myRows(KEYS.customers).find(
     item => item.id === customerId
   );
@@ -607,7 +710,10 @@ function addLoan(event) {
   }
 
   if (!date || !dueDate || dueDate < date) {
-    showNotice("O primeiro vencimento deve ser igual ou posterior à data do empréstimo.", true);
+    showNotice(
+      "O primeiro vencimento deve ser igual ou posterior à data do empréstimo.",
+      true
+    );
     return;
   }
 
@@ -636,7 +742,9 @@ function addLoan(event) {
   if (!saveMyRows(KEYS.loans, loans)) return;
 
   $("loan-form").reset();
+
   manualInstallment = false;
+
   $("loan-interest").value = "20";
   $("loan-plan").value = "daily";
   $("loan-term").value = "20";
@@ -661,11 +769,15 @@ function customerName(customerId) {
 function paidForLoan(loanId) {
   return myRows(KEYS.payments)
     .filter(payment => payment.loanId === loanId)
-    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    .reduce((sum, payment) =>
+      sum + Number(payment.amount || 0), 0);
 }
 
 function balanceForLoan(loan) {
-  return Math.max(0, Number(loan.total || 0) - paidForLoan(loan.id));
+  return Math.max(
+    0,
+    Number(loan.total || 0) - paidForLoan(loan.id)
+  );
 }
 
 function renderLoans() {
@@ -676,22 +788,28 @@ function renderLoans() {
     .sort((a, b) => b.date.localeCompare(a.date));
 
   if (!loans.length) {
-    container.innerHTML = '<p class="empty-state">Nenhum empréstimo registrado. Cadastre um cliente antes de criar um empréstimo.</p>';
+    container.innerHTML =
+      '<p class="empty-state">Nenhum empréstimo registrado. Cadastre um cliente antes de criar um empréstimo.</p>';
     return;
   }
 
   container.innerHTML = loans.map(loan => {
     const paid = paidForLoan(loan.id);
     const balance = balanceForLoan(loan);
-    const overdue = balance > 0 && loan.dueDate < today();
+    const schedule = makeSchedule(loan);
+    const overdue = balance > 0 && schedule.some(
+      date => date < today()
+    );
 
     let status;
 
-    if (balance <= 0) status = '<span class="status status-paid">Pago</span>';
-    else if (overdue) status = '<span class="status status-overdue">Atrasado</span>';
-    else status = '<span class="status status-pending">Pendente</span>';
-
-    const schedule = makeSchedule(loan);
+    if (balance <= 0) {
+      status = '<span class="status status-paid">Pago</span>';
+    } else if (overdue) {
+      status = '<span class="status status-overdue">Atrasado</span>';
+    } else {
+      status = '<span class="status status-pending">Pendente</span>';
+    }
 
     return `
       <article class="loan-card">
@@ -730,13 +848,17 @@ function renderLoans() {
 
 function parseMoneyInput(value) {
   const trimmed = String(value).trim().replace(/\s/g, "");
+
   if (!trimmed) return NaN;
 
   if (trimmed.includes(",") && trimmed.includes(".")) {
     return Number(trimmed.replace(/\./g, "").replace(",", "."));
   }
 
-  if (trimmed.includes(",")) return Number(trimmed.replace(",", "."));
+  if (trimmed.includes(",")) {
+    return Number(trimmed.replace(",", "."));
+  }
+
   return Number(trimmed);
 }
 
@@ -744,7 +866,9 @@ function registerPayment(loanId) {
   const user = currentUser();
   if (!user) return showScreen("login");
 
-  const loan = myRows(KEYS.loans).find(item => item.id === loanId);
+  const loan = myRows(KEYS.loans).find(
+    item => item.id === loanId
+  );
 
   if (!loan) {
     showNotice("Empréstimo não encontrado.", true);
@@ -766,8 +890,15 @@ function registerPayment(loanId) {
 
   const amount = parseMoneyInput(input);
 
-  if (!Number.isFinite(amount) || amount <= 0 || amount > balance + 0.000001) {
-    showNotice("Informe um valor maior que zero e até o saldo pendente.", true);
+  if (
+    !Number.isFinite(amount) ||
+    amount <= 0 ||
+    amount > balance + 0.000001
+  ) {
+    showNotice(
+      "Informe um valor maior que zero e até o saldo pendente.",
+      true
+    );
     return;
   }
 
@@ -792,6 +923,7 @@ function registerPayment(loanId) {
   renderCustomers();
 
   showNotice("Pagamento registrado. Preparando o recibo PNG…");
+
   generateReceipt("payment", payment, loan);
 }
 
@@ -832,7 +964,11 @@ function editPayment(paymentId) {
 
   const index = Number.parseInt(choice, 10) - 1;
 
-  if (!Number.isInteger(index) || index < 0 || index >= loans.length) {
+  if (
+    !Number.isInteger(index) ||
+    index < 0 ||
+    index >= loans.length
+  ) {
     showNotice("Número de empréstimo inválido.", true);
     return;
   }
@@ -851,8 +987,15 @@ function editPayment(paymentId) {
 
   const amount = parseMoneyInput(amountText);
 
-  if (!Number.isFinite(amount) || amount <= 0 || amount > targetBalance + 0.000001) {
-    showNotice("Valor inválido ou superior ao saldo do empréstimo escolhido.", true);
+  if (
+    !Number.isFinite(amount) ||
+    amount <= 0 ||
+    amount > targetBalance + 0.000001
+  ) {
+    showNotice(
+      "Valor inválido ou superior ao saldo do empréstimo escolhido.",
+      true
+    );
     return;
   }
 
@@ -875,18 +1018,24 @@ function editPayment(paymentId) {
   renderHistory();
   renderCustomers();
 
-  showNotice("Pagamento corrigido e vinculado ao empréstimo escolhido.");
+  showNotice(
+    "Pagamento corrigido e vinculado ao empréstimo escolhido."
+  );
 }
 
 function deletePayment(paymentId) {
-  const payment = myRows(KEYS.payments).find(item => item.id === paymentId);
+  const payment = myRows(KEYS.payments).find(
+    item => item.id === paymentId
+  );
 
   if (!payment) {
     showNotice("Pagamento não encontrado.", true);
     return;
   }
 
-  if (!confirm("Deseja excluir este pagamento? O saldo será atualizado.")) return;
+  if (!confirm(
+    "Deseja excluir este pagamento? O saldo será atualizado."
+  )) return;
 
   const updated = myRows(KEYS.payments).filter(
     item => item.id !== paymentId
@@ -910,7 +1059,10 @@ function generateReceipt(type, record, loan = null) {
   }
 
   if (!loan) {
-    showNotice("Não foi possível localizar o empréstimo do recibo.", true);
+    showNotice(
+      "Não foi possível localizar o empréstimo do recibo.",
+      true
+    );
     return;
   }
 
@@ -918,7 +1070,11 @@ function generateReceipt(type, record, loan = null) {
   const customer = customerName(loan.customerId);
   const amount = isPayment ? record.amount : loan.total;
   const date = isPayment ? record.date : loan.date;
-  const title = isPayment ? "RECIBO DE PAGAMENTO" : "RECIBO DE EMPRÉSTIMO";
+
+  const title = isPayment
+    ? "RECIBO DE PAGAMENTO"
+    : "RECIBO DE EMPRÉSTIMO";
+
   const lines = [
     "CrediFácil — Controle Financeiro",
     "",
@@ -927,7 +1083,9 @@ function generateReceipt(type, record, loan = null) {
     "Cliente: " + customer,
     "Data: " + formatDate(date),
     "Valor: " + money(amount),
-    isPayment ? "Referente a pagamento recebido." : "Valor original: " + money(loan.amount),
+    isPayment
+      ? "Referente a pagamento recebido."
+      : "Valor original: " + money(loan.amount),
     "Plano: " + selectedPlanName(loan),
     "Total contratado: " + money(loan.total),
     "Saldo atual: " + money(balanceForLoan(loan)),
@@ -937,6 +1095,7 @@ function generateReceipt(type, record, loan = null) {
   ];
 
   const canvas = document.createElement("canvas");
+
   canvas.width = 900;
   canvas.height = 760;
 
@@ -951,14 +1110,17 @@ function generateReceipt(type, record, loan = null) {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   const gradient = ctx.createLinearGradient(0, 0, 900, 200);
+
   gradient.addColorStop(0, "#ff3d9a");
   gradient.addColorStop(1, "#8d37e8");
+
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 900, 170);
 
   ctx.fillStyle = "#ffffff";
   ctx.font = "bold 42px Arial";
   ctx.fillText("CrediFácil", 48, 68);
+
   ctx.font = "20px Arial";
   ctx.fillText("GESTÃO DE CRÉDITOS", 50, 105);
 
@@ -968,6 +1130,7 @@ function generateReceipt(type, record, loan = null) {
 
   ctx.strokeStyle = "#49304b";
   ctx.lineWidth = 2;
+
   ctx.beginPath();
   ctx.moveTo(48, 252);
   ctx.lineTo(852, 252);
@@ -984,7 +1147,12 @@ function generateReceipt(type, record, loan = null) {
 
   ctx.fillStyle = "#a69bad";
   ctx.font = "16px Arial";
-  ctx.fillText("Guarde esta imagem como comprovante da movimentação.", 50, 710);
+
+  ctx.fillText(
+    "Guarde esta imagem como comprovante da movimentação.",
+    50,
+    710
+  );
 
   canvas.toBlob(blob => {
     if (!blob) {
@@ -994,13 +1162,18 @@ function generateReceipt(type, record, loan = null) {
 
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
+
     link.href = url;
-    link.download = `credifacil-recibo-${isPayment ? "pagamento" : "emprestimo"}-${Date.now()}.png`;
+
+    link.download =
+      `credifacil-recibo-${isPayment ? "pagamento" : "emprestimo"}-${Date.now()}.png`;
+
     document.body.appendChild(link);
     link.click();
     link.remove();
 
     setTimeout(() => URL.revokeObjectURL(url), 1500);
+
     showNotice("Recibo PNG gerado. Confira os downloads do navegador.");
   }, "image/png");
 }
@@ -1017,8 +1190,16 @@ function addExpense(event) {
   const amount = Number($("expense-amount").value);
   const date = $("expense-date").value;
 
-  if (!description || !date || !Number.isFinite(amount) || amount <= 0) {
-    showNotice("Preencha corretamente a descrição, o valor e a data.", true);
+  if (
+    !description ||
+    !date ||
+    !Number.isFinite(amount) ||
+    amount <= 0
+  ) {
+    showNotice(
+      "Preencha corretamente a descrição, o valor e a data.",
+      true
+    );
     return;
   }
 
@@ -1041,6 +1222,7 @@ function addExpense(event) {
   renderExpenses();
   renderDashboard();
   renderHistory();
+
   showNotice("Gasto registrado com sucesso.");
 }
 
@@ -1052,7 +1234,8 @@ function renderExpenses() {
     .sort((a, b) => b.date.localeCompare(a.date));
 
   if (!expenses.length) {
-    container.innerHTML = '<p class="empty-state">Nenhum gasto registrado.</p>';
+    container.innerHTML =
+      '<p class="empty-state">Nenhum gasto registrado.</p>';
     return;
   }
 
@@ -1061,13 +1244,18 @@ function renderExpenses() {
       <h3>${escapeHTML(expense.description)}</h3>
       <p>Valor: <strong class="money-out">${money(expense.amount)}</strong></p>
       <p>Data: ${escapeHTML(formatDate(expense.date))}</p>
-      <button type="button" data-delete-expense="${escapeHTML(expense.id)}">Excluir gasto</button>
+      <button type="button"
+        data-delete-expense="${escapeHTML(expense.id)}">
+        Excluir gasto
+      </button>
     </article>
   `).join("");
 }
 
 function deleteExpense(expenseId) {
-  if (!myRows(KEYS.expenses).some(item => item.id === expenseId)) {
+  if (!myRows(KEYS.expenses).some(
+    item => item.id === expenseId
+  )) {
     showNotice("Gasto não encontrado.", true);
     return;
   }
@@ -1083,7 +1271,278 @@ function deleteExpense(expenseId) {
   renderExpenses();
   renderDashboard();
   renderHistory();
+
   showNotice("Gasto excluído.");
+}
+
+/* ==================== COBRANÇA DO DIA ==================== */
+
+function collectionCustomersForDate(date) {
+  const customers = myRows(KEYS.customers);
+  const loans = myRows(KEYS.loans);
+
+  const results = [];
+
+  for (const loan of loans) {
+    if (balanceForLoan(loan) <= 0) continue;
+
+    const schedule = makeSchedule(loan);
+
+    if (!schedule.includes(date)) continue;
+
+    const customer = customers.find(
+      item => item.id === loan.customerId
+    );
+
+    if (!customer) continue;
+
+    results.push({
+      customer,
+      loan,
+      date,
+      amount: Math.min(
+        Number(loan.installment || 0),
+        balanceForLoan(loan)
+      ),
+      balance: balanceForLoan(loan)
+    });
+  }
+
+  return results.sort((a, b) =>
+    a.customer.name.localeCompare(b.customer.name, "pt-BR")
+  );
+}
+
+function renderCollectionList() {
+  const container = $("collection-list");
+  if (!container) return;
+
+  const date = collectionDateForNow();
+
+  const dateLabel = $("collection-date");
+  if (dateLabel) {
+    dateLabel.textContent =
+      `Lista de cobranças para ${formatDate(date)}`;
+  }
+
+  if (!isCollectionDay(date)) {
+    container.innerHTML =
+      '<p class="empty-state">Domingo sem cobrança. A lista será preparada para o próximo dia permitido.</p>';
+    return;
+  }
+
+  const results = collectionCustomersForDate(date);
+
+  if (!results.length) {
+    container.innerHTML =
+      '<p class="empty-state">Nenhuma parcela prevista para este dia.</p>';
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Cliente</th>
+            <th>Telefone</th>
+            <th>Parcela prevista</th>
+            <th>Saldo pendente</th>
+            <th>Ação</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${results.map(item => `
+            <tr>
+              <td><strong>${escapeHTML(item.customer.name)}</strong></td>
+              <td>${escapeHTML(item.customer.phone)}</td>
+              <td>${money(item.amount)}</td>
+              <td>${money(item.balance)}</td>
+              <td>
+                <button type="button"
+                  data-payment-loan="${escapeHTML(item.loan.id)}">
+                  Registrar pagamento
+                </button>
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+/* ==================== FECHAMENTO DIÁRIO ==================== */
+
+function getClosedDates() {
+  return myRows(KEYS.dailyClosures);
+}
+
+function closureExists(date) {
+  return getClosedDates().some(item => item.date === date);
+}
+
+function createDailyClosure(date) {
+  if (closureExists(date)) return false;
+
+  const user = currentUser();
+  if (!user) return false;
+
+  const loans = myRows(KEYS.loans);
+  const payments = myRows(KEYS.payments);
+  const expenses = myRows(KEYS.expenses);
+
+  const dailyPayments = payments.filter(
+    payment => payment.date === date
+  );
+
+  const dailyLoans = loans.filter(
+    loan => loan.date === date
+  );
+
+  const dailyExpenses = expenses.filter(
+    expense => expense.date === date
+  );
+
+  const closure = {
+    id: makeId(),
+    userId: user.id,
+    date,
+    closedAt: new Date().toISOString(),
+    paymentCount: dailyPayments.length,
+    paymentTotal: dailyPayments.reduce(
+      (sum, payment) => sum + Number(payment.amount || 0),
+      0
+    ),
+    loanCount: dailyLoans.length,
+    loanTotal: dailyLoans.reduce(
+      (sum, loan) => sum + Number(loan.amount || 0),
+      0
+    ),
+    expenseCount: dailyExpenses.length,
+    expenseTotal: dailyExpenses.reduce(
+      (sum, expense) => sum + Number(expense.amount || 0),
+      0
+    ),
+    collectionCustomers: collectionCustomersForDate(date).length
+  };
+
+  const all = read(KEYS.dailyClosures, []);
+
+  const updated = [
+    ...all.filter(item =>
+      item.userId !== user.id || item.date !== date
+    ),
+    closure
+  ];
+
+  if (!write(KEYS.dailyClosures, updated)) return false;
+
+  return true;
+}
+
+function processDailyClosures() {
+  const user = currentUser();
+  if (!user) return;
+
+  const now = new Date();
+  const currentDate = today();
+
+  const lastClosure = getClosedDates()
+    .map(item => item.date)
+    .filter(Boolean)
+    .sort()
+    .pop();
+
+  // Primeira execução: não cria fechamentos retroativos.
+  // Após 23h, fecha o dia atual.
+  if (!lastClosure) {
+    if (now.getHours() >= 23) {
+      createDailyClosure(currentDate);
+    }
+
+    updateDailyCloseStatus();
+    return;
+  }
+
+  // Recupera dias que ficaram sem fechamento enquanto
+  // o navegador ou notebook estava desligado.
+  let cursor = localDateFromString(lastClosure);
+
+  cursor.setDate(cursor.getDate() + 1);
+
+  const target = now.getHours() >= 23
+    ? localDateFromString(currentDate)
+    : localDateFromString(
+        dateToInput(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 12))
+      );
+
+  let safety = 0;
+
+  while (cursor <= target && safety < 400) {
+    const date = dateToInput(cursor);
+
+    if (!closureExists(date)) {
+      createDailyClosure(date);
+    }
+
+    cursor.setDate(cursor.getDate() + 1);
+    safety++;
+  }
+
+  if (now.getHours() >= 23 && !closureExists(currentDate)) {
+    createDailyClosure(currentDate);
+  }
+
+  updateDailyCloseStatus();
+}
+
+function updateDailyCloseStatus() {
+  const status = $("daily-close-status");
+  const summary = $("daily-close-summary");
+
+  if (!status && !summary) return;
+
+  const now = new Date();
+  const date = today();
+  const closed = closureExists(date);
+
+  if (status) {
+    status.textContent = closed
+      ? "Fechado"
+      : "Em andamento";
+
+    status.classList.toggle("status-paid", closed);
+    status.classList.toggle("status-pending", !closed);
+  }
+
+  if (summary) {
+    if (closed) {
+      summary.textContent =
+        `Movimento de ${formatDate(date)} fechado. O histórico foi preservado.`;
+    } else {
+      summary.textContent =
+        "O fechamento diário está programado para as 23h.";
+    }
+  }
+}
+
+function startDailyTimer() {
+  stopDailyTimer();
+
+  dailyTimer = setInterval(() => {
+    if (!currentUser()) return;
+
+    processDailyClosures();
+    renderCollectionList();
+  }, 30000);
+}
+
+function stopDailyTimer() {
+  if (dailyTimer !== null) {
+    clearInterval(dailyTimer);
+    dailyTimer = null;
+  }
 }
 
 /* ==================== PAINEL ==================== */
@@ -1094,15 +1553,18 @@ function renderDashboard() {
   const payments = myRows(KEYS.payments);
 
   const totalLoaned = loans.reduce(
-    (sum, loan) => sum + Number(loan.amount || 0), 0
+    (sum, loan) => sum + Number(loan.amount || 0),
+    0
   );
 
   const totalReceived = payments.reduce(
-    (sum, payment) => sum + Number(payment.amount || 0), 0
+    (sum, payment) => sum + Number(payment.amount || 0),
+    0
   );
 
   const totalPending = loans.reduce(
-    (sum, loan) => sum + balanceForLoan(loan), 0
+    (sum, loan) => sum + balanceForLoan(loan),
+    0
   );
 
   $("total-loaned").textContent = money(totalLoaned);
@@ -1111,35 +1573,45 @@ function renderDashboard() {
   $("total-customers").textContent = String(customers.length);
 
   const recent = $("dashboard-recent");
-  if (!recent) return;
 
-  const latest = [...loans]
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 4);
+  if (recent) {
+    const latest = [...loans]
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 4);
 
-  if (!latest.length) {
-    recent.innerHTML = '<p class="empty-state">Nenhum empréstimo registrado.</p>';
-    return;
+    if (!latest.length) {
+      recent.innerHTML =
+        '<p class="empty-state">Nenhum empréstimo registrado.</p>';
+    } else {
+      recent.innerHTML = latest.map(loan => {
+        const name = customerName(loan.customerId);
+
+        const initials = name
+          .split(/\s+/)
+          .slice(0, 2)
+          .map(word => word[0] || "")
+          .join("")
+          .toUpperCase();
+
+        return `
+          <div class="recent-row">
+            <span class="customer-avatar">${escapeHTML(initials)}</span>
+            <span class="recent-info">
+              <b>${escapeHTML(name)}</b>
+              <small>${escapeHTML(formatDate(loan.date))} · ${balanceForLoan(loan) <= 0 ? "Pago" : "Em andamento"}</small>
+            </span>
+            <span class="recent-amount">
+              ${money(loan.total)}
+              <small>Saldo: ${money(balanceForLoan(loan))}</small>
+            </span>
+          </div>
+        `;
+      }).join("");
+    }
   }
 
-  recent.innerHTML = latest.map(loan => {
-    const name = customerName(loan.customerId);
-    const initials = name.split(/\s+/).slice(0, 2)
-      .map(word => word[0] || "").join("").toUpperCase();
-
-    return `
-      <div class="recent-row">
-        <span class="customer-avatar">${escapeHTML(initials)}</span>
-        <span class="recent-info">
-          <b>${escapeHTML(name)}</b>
-          <small>${escapeHTML(formatDate(loan.date))} · ${balanceForLoan(loan) <= 0 ? "Pago" : "Em andamento"}</small>
-        </span>
-        <span class="recent-amount">${money(loan.total)}
-          <small>Saldo: ${money(balanceForLoan(loan))}</small>
-        </span>
-      </div>
-    `;
-  }).join("");
+  renderCollectionList();
+  updateDailyCloseStatus();
 }
 
 /* ==================== HISTÓRICO ==================== */
@@ -1151,6 +1623,7 @@ function renderHistory() {
   const loans = myRows(KEYS.loans);
   const payments = myRows(KEYS.payments);
   const expenses = myRows(KEYS.expenses);
+  const closures = getClosedDates();
 
   const items = [
     ...loans.map(loan => ({
@@ -1164,14 +1637,18 @@ function renderHistory() {
     })),
 
     ...payments.map(payment => {
-      const loan = loans.find(item => item.id === payment.loanId);
+      const loan = loans.find(
+        item => item.id === payment.loanId
+      );
 
       return {
         id: payment.id,
         date: payment.date,
         createdAt: payment.createdAt || "",
         type: "Pagamento recebido",
-        description: loan ? customerName(loan.customerId) : "Empréstimo não encontrado",
+        description: loan
+          ? customerName(loan.customerId)
+          : "Empréstimo não encontrado",
         amount: payment.amount,
         sign: "in",
         paymentId: payment.id,
@@ -1187,21 +1664,46 @@ function renderHistory() {
       description: expense.description,
       amount: expense.amount,
       sign: "out"
+    })),
+
+    ...closures.map(closure => ({
+      id: closure.id,
+      date: closure.date,
+      createdAt: closure.closedAt || "",
+      type: "Fechamento diário",
+      description:
+        `Recebido: ${money(closure.paymentTotal)} · ` +
+        `Empréstimos: ${money(closure.loanTotal)} · ` +
+        `Gastos: ${money(closure.expenseTotal)}`,
+      amount: closure.paymentTotal,
+      sign: "in",
+      isClosure: true
     }))
   ].sort((a, b) => {
     const order = b.date.localeCompare(a.date);
-    return order !== 0 ? order : b.createdAt.localeCompare(a.createdAt);
+
+    return order !== 0
+      ? order
+      : b.createdAt.localeCompare(a.createdAt);
   });
 
   if (!items.length) {
-    container.innerHTML = '<p class="empty-state">Nenhuma movimentação registrada.</p>';
+    container.innerHTML =
+      '<p class="empty-state">Nenhuma movimentação registrada.</p>';
     return;
   }
 
   container.innerHTML = `
     <div class="table-container">
       <table>
-        <thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Valor e ações</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Tipo</th>
+            <th>Descrição</th>
+            <th>Valor e ações</th>
+          </tr>
+        </thead>
         <tbody>
           ${items.map(item => `
             <tr>
@@ -1209,12 +1711,25 @@ function renderHistory() {
               <td>${escapeHTML(item.type)}</td>
               <td>${escapeHTML(item.description)}</td>
               <td>
-                <strong class="${item.sign === "in" ? "money-in" : "money-out"}">${item.sign === "in" ? "+" : "−"} ${money(item.amount)}</strong>
+                ${
+                  item.isClosure
+                    ? `<strong>${money(item.amount)}</strong>`
+                    : `<strong class="${item.sign === "in" ? "money-in" : "money-out"}">${item.sign === "in" ? "+" : "−"} ${money(item.amount)}</strong>`
+                }
                 ${item.paymentId ? `
                   <div class="history-actions">
-                    <button type="button" data-edit-payment="${escapeHTML(item.paymentId)}">Corrigir</button>
-                    <button type="button" data-delete-payment="${escapeHTML(item.paymentId)}">Excluir</button>
-                    <button type="button" data-receipt-payment="${escapeHTML(item.paymentId)}">Recibo PNG</button>
+                    <button type="button"
+                      data-edit-payment="${escapeHTML(item.paymentId)}">
+                      Corrigir
+                    </button>
+                    <button type="button"
+                      data-delete-payment="${escapeHTML(item.paymentId)}">
+                      Excluir
+                    </button>
+                    <button type="button"
+                      data-receipt-payment="${escapeHTML(item.paymentId)}">
+                      Recibo PNG
+                    </button>
                   </div>
                 ` : ""}
               </td>
@@ -1242,15 +1757,18 @@ function renderAll() {
 document.addEventListener("DOMContentLoaded", () => {
   const headerDate = $("header-date");
 
-  headerDate.textContent = new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric"
-  }).format(new Date());
+  if (headerDate) {
+    headerDate.textContent = new Intl.DateTimeFormat("pt-BR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric"
+    }).format(new Date());
+  }
 
   $("show-register").addEventListener("click", () => {
     $("login-error").textContent = "";
     $("register-error").textContent = "";
+
     showScreen("register");
     window.scrollTo({ top: 0, behavior: "smooth" });
   });
@@ -1258,6 +1776,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("show-login").addEventListener("click", () => {
     $("login-error").textContent = "";
     $("register-error").textContent = "";
+
     showScreen("login");
     window.scrollTo({ top: 0, behavior: "smooth" });
   });
@@ -1302,56 +1821,94 @@ document.addEventListener("DOMContentLoaded", () => {
   $("loan-due-date").addEventListener("change", () => {
     if ($("loan-due-date").value < $("loan-date").value) {
       $("loan-due-date").value = $("loan-date").value;
-      showNotice("O primeiro vencimento não pode ser anterior ao empréstimo.", true);
+
+      showNotice(
+        "O primeiro vencimento não pode ser anterior ao empréstimo.",
+        true
+      );
     }
   });
 
   document.querySelectorAll("[data-page]").forEach(button => {
-    button.addEventListener("click", () => showPage(button.dataset.page));
+    button.addEventListener("click", () =>
+      showPage(button.dataset.page)
+    );
   });
 
   document.querySelectorAll("[data-open-page]").forEach(button => {
-    button.addEventListener("click", () => showPage(button.dataset.openPage));
+    button.addEventListener("click", () =>
+      showPage(button.dataset.openPage)
+    );
   });
 
   const menuButton = $("mobile-menu-toggle");
   const nav = $("main-nav");
 
-  menuButton.addEventListener("click", () => {
-    const opened = nav.classList.toggle("open");
-    menuButton.setAttribute("aria-expanded", String(opened));
-  });
+  if (menuButton && nav) {
+    menuButton.addEventListener("click", () => {
+      const opened = nav.classList.toggle("open");
+
+      menuButton.setAttribute(
+        "aria-expanded",
+        String(opened)
+      );
+    });
+  }
 
   document.addEventListener("click", event => {
     const target = event.target;
+
     if (!(target instanceof Element)) return;
 
-    const deleteCustomerButton = target.closest("[data-delete-customer]");
-    const paymentButton = target.closest("[data-payment-loan]");
-    const deleteExpenseButton = target.closest("[data-delete-expense]");
-    const editPaymentButton = target.closest("[data-edit-payment]");
-    const deletePaymentButton = target.closest("[data-delete-payment]");
-    const loanReceiptButton = target.closest("[data-receipt-loan]");
-    const paymentReceiptButton = target.closest("[data-receipt-payment]");
+    const deleteCustomerButton =
+      target.closest("[data-delete-customer]");
+
+    const paymentButton =
+      target.closest("[data-payment-loan]");
+
+    const deleteExpenseButton =
+      target.closest("[data-delete-expense]");
+
+    const editPaymentButton =
+      target.closest("[data-edit-payment]");
+
+    const deletePaymentButton =
+      target.closest("[data-delete-payment]");
+
+    const loanReceiptButton =
+      target.closest("[data-receipt-loan]");
+
+    const paymentReceiptButton =
+      target.closest("[data-receipt-payment]");
 
     if (deleteCustomerButton) {
-      deleteCustomer(deleteCustomerButton.dataset.deleteCustomer);
+      deleteCustomer(
+        deleteCustomerButton.dataset.deleteCustomer
+      );
     }
 
     if (paymentButton) {
-      registerPayment(paymentButton.dataset.paymentLoan);
+      registerPayment(
+        paymentButton.dataset.paymentLoan
+      );
     }
 
     if (deleteExpenseButton) {
-      deleteExpense(deleteExpenseButton.dataset.deleteExpense);
+      deleteExpense(
+        deleteExpenseButton.dataset.deleteExpense
+      );
     }
 
     if (editPaymentButton) {
-      editPayment(editPaymentButton.dataset.editPayment);
+      editPayment(
+        editPaymentButton.dataset.editPayment
+      );
     }
 
     if (deletePaymentButton) {
-      deletePayment(deletePaymentButton.dataset.deletePayment);
+      deletePayment(
+        deletePaymentButton.dataset.deletePayment
+      );
     }
 
     if (loanReceiptButton) {
@@ -1368,14 +1925,31 @@ document.addEventListener("DOMContentLoaded", () => {
       );
 
       const loan = payment
-        ? myRows(KEYS.loans).find(item => item.id === payment.loanId)
+        ? myRows(KEYS.loans).find(
+            item => item.id === payment.loanId
+          )
         : null;
 
-      if (payment && loan) generateReceipt("payment", payment, loan);
-      else showNotice("Não foi possível localizar o pagamento ou empréstimo.", true);
+      if (payment && loan) {
+        generateReceipt("payment", payment, loan);
+      } else {
+        showNotice(
+          "Não foi possível localizar o pagamento ou empréstimo.",
+          true
+        );
+      }
     }
   });
 
+  // Verifica fechamentos ao voltar para a aba.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && currentUser()) {
+      processDailyClosures();
+      renderDashboard();
+    }
+  });
+
+  // Datas iniciais dos formulários.
   $("loan-date").value = today();
   $("loan-due-date").value = today();
   $("expense-date").value = today();
@@ -1385,6 +1959,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   updateLoanTotal();
 
-  if (currentUser()) enterApp();
-  else showScreen("login");
+  if (currentUser()) {
+    enterApp();
+  } else {
+    showScreen("login");
+  }
 });
