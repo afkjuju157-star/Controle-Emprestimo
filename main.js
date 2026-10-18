@@ -4,6 +4,7 @@
    CREDIFÁCIL — CONTROLE DE EMPRÉSTIMOS
    Clientes, empréstimos, pagamentos, recibos em PNG,
    painel financeiro, despesas, histórico e sessão.
+   Sem cobrança aos domingos e feriados nacionais.
    ========================================================= */
 
 const KEYS = {
@@ -359,14 +360,6 @@ function loanLabel(loan) {
    CÁLCULOS FINANCEIROS
    ========================================================= */
 
-/*
- * Os valores de lucro são estimativas com base no contrato.
- * Para estimar o lucro recebido, distribuímos cada pagamento
- * proporcionalmente entre capital e ganho previsto.
- *
- * Isso não substitui contabilidade nem comprova lucro líquido.
- */
-
 function getFinancialTotals() {
   const loans = ownRecords(KEYS.loans);
   const payments = ownRecords(KEYS.payments);
@@ -579,8 +572,191 @@ function renderFinancePanel() {
 }
 
 /* =========================================================
-   DATAS E PRAZOS
+   DATAS E FERIADOS NACIONAIS
    ========================================================= */
+
+/*
+ * Feriados nacionais fixos:
+ * 01/01 — Confraternização Universal
+ * 21/04 — Tiradentes
+ * 01/05 — Dia do Trabalho
+ * 07/09 — Independência do Brasil
+ * 12/10 — Nossa Senhora Aparecida
+ * 02/11 — Finados
+ * 15/11 — Proclamação da República
+ * 20/11 — Dia Nacional de Zumbi e da Consciência Negra
+ * 25/12 — Natal
+ *
+ * Também consideramos a Sexta-feira Santa, calculada a partir
+ * da Páscoa. Feriados estaduais e municipais precisam ser
+ * adicionados separadamente.
+ */
+
+function padDatePart(value) {
+  return String(value).padStart(2, "0");
+}
+
+function formatDateISO(date) {
+  return `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`;
+}
+
+function parseDateISO(dateString) {
+  if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    return null;
+  }
+
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+function addDays(dateString, days) {
+  const date = parseDateISO(dateString);
+
+  if (!date) return "";
+
+  date.setDate(date.getDate() + Number(days));
+
+  return formatDateISO(date);
+}
+
+/*
+ * Calcula a data da Páscoa pelo método gregoriano.
+ */
+function easterDate(year) {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+
+  return `${year}-${padDatePart(month)}-${padDatePart(day)}`;
+}
+
+/*
+ * Retorna as datas de feriados considerados pelo aplicativo.
+ */
+function getNationalHolidays(year) {
+  const fixedHolidays = [
+    `${year}-01-01`,
+    `${year}-04-21`,
+    `${year}-05-01`,
+    `${year}-09-07`,
+    `${year}-10-12`,
+    `${year}-11-02`,
+    `${year}-11-15`,
+    `${year}-11-20`,
+    `${year}-12-25`
+  ];
+
+  const easter = easterDate(year);
+  const goodFriday = addDays(easter, -2);
+
+  return new Set([
+    ...fixedHolidays,
+    goodFriday
+  ]);
+}
+
+/*
+ * Para adicionar feriados estaduais ou municipais, inclua
+ * as datas no formato AAAA-MM-DD no conjunto abaixo.
+ *
+ * Exemplo:
+ * "2026-10-24"
+ */
+const EXTRA_HOLIDAYS = new Set([
+  // "2026-10-24"
+]);
+
+function isSunday(dateString) {
+  const date = parseDateISO(dateString);
+
+  if (!date) return false;
+
+  return date.getDay() === 0;
+}
+
+function isNationalHoliday(dateString) {
+  const date = parseDateISO(dateString);
+
+  if (!date) return false;
+
+  const holidays = getNationalHolidays(date.getFullYear());
+
+  return holidays.has(dateString);
+}
+
+function isExtraHoliday(dateString) {
+  return EXTRA_HOLIDAYS.has(dateString);
+}
+
+function isNonCollectionDay(dateString) {
+  return isSunday(dateString) ||
+    isNationalHoliday(dateString) ||
+    isExtraHoliday(dateString);
+}
+
+function getNonCollectionReason(dateString) {
+  if (isSunday(dateString)) {
+    return "domingo";
+  }
+
+  if (isNationalHoliday(dateString)) {
+    return "feriado nacional";
+  }
+
+  if (isExtraHoliday(dateString)) {
+    return "feriado estadual ou municipal cadastrado";
+  }
+
+  return "";
+}
+
+/*
+ * Calcula o vencimento contando somente os dias permitidos
+ * para cobrança. A data inicial do contrato não conta como
+ * parcela; a contagem começa no dia seguinte.
+ */
+function calculateDueDate(startDate, term) {
+  if (!parseDateISO(startDate)) return "";
+
+  let currentDate = startDate;
+  let countedDays = 0;
+  let safety = 0;
+
+  while (countedDays < Number(term) && safety < 1000) {
+    currentDate = addDays(currentDate, 1);
+
+    if (!currentDate) return "";
+
+    if (!isNonCollectionDay(currentDate)) {
+      countedDays++;
+    }
+
+    safety++;
+  }
+
+  return countedDays === Number(term) ? currentDate : "";
+}
 
 function setDefaultDates() {
   ["loan-date", "payment-date", "expense-date"].forEach(idName => {
@@ -594,21 +770,12 @@ function setDefaultDates() {
   updateDueDate();
 }
 
-function addDays(dateString, days) {
-  const [year, month, day] = dateString.split("-").map(Number);
-  const date = new Date(year, month - 1, day);
-
-  date.setDate(date.getDate() + Number(days));
-
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
 function updateDueDate() {
   const start = $("loan-date")?.value;
   const term = numberValue($("loan-term")?.value || 20);
 
   if (start && $("loan-due-date")) {
-    $("loan-due-date").value = addDays(start, term);
+    $("loan-due-date").value = calculateDueDate(start, term);
   }
 
   updateLoanPreview();
@@ -617,7 +784,8 @@ function updateDueDate() {
 function updateLoanPreview() {
   const term = numberValue($("loan-term")?.value || 20);
   const daily = numberValue($("loan-daily-payment")?.value);
-  const total = term * daily;
+  const total = Math.round(term * daily * 100) / 100;
+  const dueDate = $("loan-due-date")?.value || "";
 
   if ($("loan-total-preview")) {
     $("loan-total-preview").textContent = money(total);
@@ -625,8 +793,8 @@ function updateLoanPreview() {
 
   if ($("loan-preview-detail")) {
     $("loan-preview-detail").textContent = daily > 0
-      ? `${term} parcelas de ${money(daily)}. Total previsto: ${money(total)}.`
-      : `Informe o valor da parcela diária para ${term} dias.`;
+      ? `${term} parcelas de ${money(daily)} em dias permitidos. Total previsto: ${money(total)}. Vencimento final: ${dateBR(dueDate)}.`
+      : `Informe o valor da parcela para ${term} dias de cobrança permitidos.`;
   }
 }
 
@@ -896,7 +1064,7 @@ function renderLoans() {
             ${daily ? `<small>Parcela: ${money(daily)}</small>` : ""}
           </td>
           <td>
-            ${escapeHTML(term)}${term !== "—" ? " dias" : ""}
+            ${escapeHTML(term)}${term !== "—" ? " dias de cobrança" : ""}
             <small>Final: ${dateBR(loan.dueDate)}</small>
           </td>
           <td>${money(received)}</td>
@@ -1060,6 +1228,7 @@ function ensureReceiptActions() {
       if (!currentReceipt) return;
 
       const text = encodeURIComponent(receiptText(currentReceipt));
+
       window.open(
         `https://wa.me/?text=${text}`,
         "_blank",
@@ -1088,6 +1257,7 @@ function receiptImageData() {
   const width = 900;
   const padding = 60;
   const rowHeight = 67;
+
   const rows = [
     ["Cliente", customer?.name || "Cliente"],
     ["Valor recebido", money(payment.amount)],
@@ -1166,6 +1336,7 @@ function receiptImageData() {
 
   ctx.fillStyle = "#71818a";
   ctx.font = "18px Arial";
+
   ctx.fillText(
     "Documento de registro. Confira os valores informados.",
     padding,
@@ -1914,7 +2085,6 @@ on("loan-form", "submit", event => {
   const term = numberValue($("loan-term")?.value);
   const dailyPayment = numberValue($("loan-daily-payment")?.value);
   const date = $("loan-date")?.value || "";
-  const dueDate = $("loan-due-date")?.value || "";
 
   if (!getCustomer(customerId)) {
     return showMessage("Selecione um cliente cadastrado.", true);
@@ -1932,8 +2102,14 @@ on("loan-form", "submit", event => {
     return showMessage("Informe o valor da parcela diária.", true);
   }
 
-  if (!date || !dueDate || dueDate < date) {
-    return showMessage("Confira as datas do empréstimo.", true);
+  if (!parseDateISO(date)) {
+    return showMessage("Informe uma data válida para o empréstimo.", true);
+  }
+
+  const dueDate = calculateDueDate(date, term);
+
+  if (!dueDate) {
+    return showMessage("Não foi possível calcular o vencimento.", true);
   }
 
   const total = Math.round(dailyPayment * term * 100) / 100;
@@ -1969,7 +2145,7 @@ on("loan-form", "submit", event => {
   renderAll();
 
   showMessage(
-    `Empréstimo cadastrado. Total das ${term} parcelas: ${money(total)}.`
+    `Empréstimo cadastrado. São ${term} parcelas em dias permitidos, com vencimento final em ${dateBR(dueDate)}. Total: ${money(total)}.`
   );
 });
 
@@ -1997,8 +2173,17 @@ on("payment-form", "submit", event => {
     return showMessage("Informe um valor de pagamento válido.", true);
   }
 
-  if (!date) {
-    return showMessage("Informe a data do pagamento.", true);
+  if (!parseDateISO(date)) {
+    return showMessage("Informe uma data válida para o pagamento.", true);
+  }
+
+  if (isNonCollectionDay(date)) {
+    const reason = getNonCollectionReason(date);
+
+    return showMessage(
+      `Não é permitido registrar cobrança em ${dateBR(date)} porque é ${reason}. Escolha outro dia.`,
+      true
+    );
   }
 
   const balance = loanBalance(loan);
