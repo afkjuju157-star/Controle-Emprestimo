@@ -1,0 +1,411 @@
+/* =====================================
+   CONTROLE DE EMPRÉSTIMOS
+   ESTILO COMPLETO DO APLICATIVO
+===================================== */
+
+/* VARIÁVEIS DE CORES */
+:root {
+    --fundo: #0f172a;
+    --painel: #1e293b;
+    --painel-secundario: #334155;
+    --primaria: #0284c7;
+    --primaria-hover: #0369a1;
+    --sucesso: #22c55e;
+    --perigo: #ef4444;
+    --texto: #f8fafc;
+    --texto-secundario: #cbd5e1;
+    --borda: #475569;
+}
+
+/* CONFIGURAÇÕES GERAIS */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: linear-gradient(
+        135deg,
+        #0f172a,
+        #172554,
+        #1e40af
+    );
+    color: var(--texto);
+    min-height: 100vh;
+    padding: 24px;
+}
+
+/* TÍTULOS */
+h1, h2, h3 {
+    margin-bottom: 15px;
+    color: var(--texto);
+}
+
+h1 {
+    text-align: center;
+    margin-top: 20px;
+    font-size: 28px;
+}
+
+h2 {
+    font-size: 21px;
+}
+
+h3 {
+    font-size: 18px;
+}
+
+p {
+    color: var(--texto-secundario);
+    line-height: 1.6;
+    margin-bottom: 8px;
+}
+
+/* CARTÃO DE LOGIN E FORMULÁRIOS */
+form {
+    width: 100%;
+    max-width: 420px;
+    margin: 25px auto;
+    padding: 28px;
+    background: rgba(15, 23, 42, 0.88);
+    border: 1px solid var(--borda);
+    border-radius: 18px;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+}
+
+/* PAINÉIS E CARTÕES */
+.card,
+.painel,
+.formulario,
+.cliente-card {
+    background: var(--painel);
+    border: 1px solid var(--borda);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* CAMPOS DE FORMULÁRIO */
+label {
+    display: block;
+    margin: 12px 0 7px;
+    font-weight: bold;
+    color: #e2e8f0;
+}
+
+input,
+select,
+textarea {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    margin: 8px 0 16px;
+    border: 1px solid var(--borda);
+    border-radius: 10px;
+    background: var(--fundo);
+    color: var(--texto);
+    font-size: 15px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: var(--texto-secundario);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+}
+
+textarea {
+    resize: vertical;
+    min-height: 90px;
+}
+
+/* BOTÕES */
+button,
+.btn {
+    display: inline-block;
+    padding: 12px 18px;
+    border: none;
+    border-radius: 10px;
+    background: var(--primaria);
+    color: white;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s;
+    margin: 4px 3px 4px 0;
+}
+
+button:hover,
+.btn:hover {
+    background: var(--primaria-hover);
+    transform: translateY(-1px);
+}
+
+button:active,
+.btn:active {
+    transform: scale(0.98);
+}
+
+.btn-sucesso {
+    background: #15803d;
+}
+
+.btn-sucesso:hover {
+    background: #166534;
+}
+
+.btn-perigo {
+    background: #dc2626;
+}
+
+.btn-perigo:hover {
+    background: #b91c1c;
+}
+
+.btn-secundario {
+    background: var(--painel-secundario);
+}
+
+.btn-secundario:hover {
+    background: #475569;
+}
+
+/* RESUMO FINANCEIRO */
+.resumo,
+.dashboard {
+    display: grid;
+    grid-template-columns: repeat(
+        auto-fit,
+        minmax(180px, 1fr)
+    );
+    gap: 15px;
+    margin-bottom: 25px;
+}
+
+.resumo .card,
+.dashboard .card {
+    margin-bottom: 0;
+    border-top: 3px solid var(--primaria);
+}
+
+.valor,
+.valor-total {
+    font-size: 25px;
+    font-weight: bold;
+    margin-top: 10px;
+    color: var(--sucesso);
+}
+
+/* LISTA DE CLIENTES */
+#listaClientes {
+    display: grid;
+    gap: 15px;
+}
+
+.cliente-card {
+    margin-bottom: 0;
+    overflow-wrap: anywhere;
+}
+
+.cliente-card h3 {
+    color: #60a5fa;
+}
+
+.cliente-card p {
+    margin: 8px 0;
+}
+
+.cliente-card strong {
+    color: var(--texto);
+}
+
+/* STATUS DOS EMPRÉSTIMOS */
+.status {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.status-pago {
+    color: #86efac;
+    background: #14532d;
+}
+
+.status-pendente {
+    color: #fde68a;
+    background: #713f12;
+}
+
+.status-atrasado {
+    color: #fecaca;
+    background: #7f1d1d;
+}
+
+/* MENU DE NAVEGAÇÃO */
+nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 20px 0;
+}
+
+nav button {
+    flex: 1;
+    min-width: 100px;
+}
+
+/* TABELAS */
+.tabela-container {
+    width: 100%;
+    overflow-x: auto;
+    margin-bottom: 20px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 550px;
+    background: var(--painel);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+th,
+td {
+    padding: 13px;
+    text-align: left;
+    border-bottom: 1px solid var(--borda);
+}
+
+th {
+    background: var(--painel-secundario);
+    color: var(--texto);
+}
+
+td {
+    color: var(--texto-secundario);
+}
+
+/* CAMPO DE PESQUISA */
+.busca {
+    margin-bottom: 20px;
+}
+
+/* MENSAGENS */
+.mensagem {
+    padding: 12px;
+    border-radius: 8px;
+    margin: 12px 0;
+}
+
+.mensagem-sucesso {
+    background: #14532d;
+    color: #bbf7d0;
+}
+
+.mensagem-erro {
+    background: #7f1d1d;
+    color: #fecaca;
+}
+
+/* RODAPÉ */
+footer {
+    margin-top: 30px;
+    padding: 15px;
+    text-align: center;
+    color: var(--texto-secundario);
+}
+
+/* LINKS */
+a {
+    color: #38bdf8;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* ACESSIBILIDADE: FOCO PELO TECLADO */
+button:focus-visible,
+a:focus-visible {
+    outline: 2px solid #38bdf8;
+    outline-offset: 3px;
+}
+
+/* ADAPTAÇÃO PARA CELULARES */
+@media (max-width: 600px) {
+    body {
+        padding: 15px;
+    }
+
+    h1 {
+        font-size: 23px;
+        margin-top: 20px;
+    }
+
+    h2 {
+        font-size: 19px;
+    }
+
+    form {
+        padding: 20px;
+        margin-top: 20px;
+    }
+
+    .card,
+    .painel,
+    .formulario,
+    .cliente-card {
+        padding: 15px;
+    }
+
+    .resumo,
+    .dashboard {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .valor,
+    .valor-total {
+        font-size: 20px;
+        overflow-wrap: anywhere;
+    }
+
+    button,
+    .btn {
+        padding: 12px;
+        max-width: 100%;
+    }
+
+    nav button {
+        min-width: 0;
+    }
+
+    input,
+    select,
+    textarea {
+        font-size: 16px;
+    }
+}
+
+/* TELAS MUITO PEQUENAS */
+@media (max-width: 360px) {
+    .resumo,
+    .dashboard {
+        grid-template-columns: 1fr;
+    }
+}

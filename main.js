@@ -1,0 +1,5 @@
+function mostrarCadrasto(){
+    document.getElementByld
+
+
+}
