@@ -2,636 +2,327 @@
 
 /* =========================================================
    CREDIFÁCIL — CONTROLE DE EMPRÉSTIMOS
-   Clientes, empréstimos, pagamentos, recibos em PNG,
-   painel financeiro, despesas, histórico e sessão.
-   Sem cobrança aos domingos e feriados nacionais.
+   Clientes, empréstimos, parcelas, pagamentos, recibos PNG,
+   despesas, painel financeiro, histórico e login.
+   Armazenamento local por conta.
    ========================================================= */
+
+const $ = (id) => document.getElementById(id);
 
 const KEYS = {
-  users: "credifacil_users_v1",
-  session: "credifacil_session_v1",
-  customers: "credifacil_customers_v1",
-  loans: "credifacil_loans_v1",
-  payments: "credifacil_payments_v1",
-  expenses: "credifacil_expenses_v1",
-  lastEmail: "credifacil_last_email_v1",
-  logoutDay: "credifacil_logout_day_v1"
+  users: "credifacil_users_v2",
+  session: "credifacil_session_v2",
+  data: "credifacil_data_v2_"
 };
 
-const $ = id => document.getElementById(id);
+const PAGE_TITLES = {
+  dashboard: "Painel financeiro",
+  customers: "Clientes",
+  loans: "Empréstimos",
+  payments: "Pagamentos",
+  expenses: "Despesas",
+  history: "Histórico"
+};
 
-let currentUser = null;
-let currentReceipt = null;
-let messageTimer = null;
-let logoutTimer = null;
-let receiptImageURL = null;
-
-/* =========================================================
-   ARMAZENAMENTO
-   ========================================================= */
-
-function read(key) {
-  try {
-    const value = JSON.parse(localStorage.getItem(key) || "[]");
-    return Array.isArray(value) ? value : [];
-  } catch {
-    return [];
-  }
-}
-
-function save(key, data) {
-  localStorage.setItem(key, JSON.stringify(data));
-}
-
-function id() {
-  if (window.crypto?.randomUUID) {
-    return window.crypto.randomUUID();
-  }
-
-  return Date.now().toString(36) +
-    Math.random().toString(36).slice(2);
-}
-
-function money(value) {
-  return Number(value || 0).toLocaleString("pt-BR", {
+const money = (value) =>
+  Number(value || 0).toLocaleString("pt-BR", {
     style: "currency",
     currency: "BRL"
   });
-}
 
-function numberValue(value) {
-  return Number(String(value ?? "").replace(",", ".")) || 0;
-}
-
-function today() {
-  const d = new Date();
-
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function dateBR(value) {
+const fmtDate = (value) => {
   if (!value) return "—";
+  const date = new Date(`${value}T12:00:00`);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString("pt-BR");
+};
 
-  const parts = String(value).slice(0, 10).split("-");
+const localISO = (date = new Date()) => {
+  const d = new Date(date);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 10);
+};
 
-  if (parts.length !== 3) return escapeHTML(value);
+const today = () => localISO();
 
-  return `${parts[2]}/${parts[1]}/${parts[0]}`;
-}
+const uid = () =>
+  `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 9)}`;
 
-function escapeHTML(value) {
-  return String(value ?? "").replace(/[&<>"']/g, char => ({
+const escapeHTML = (value) =>
+  String(value ?? "").replace(/[&<>"']/g, (char) => ({
     "&": "&amp;",
     "<": "&lt;",
     ">": "&gt;",
     '"': "&quot;",
     "'": "&#39;"
   })[char]);
-}
 
-function on(idName, eventName, callback) {
-  const element = $(idName);
-
-  if (element) {
-    element.addEventListener(eventName, callback);
+function readJSON(key, fallback) {
+  try {
+    const value = localStorage.getItem(key);
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
   }
-
-  return element;
 }
 
-function ownRecords(key) {
-  if (!currentUser) return [];
-
-  return read(key).filter(item => item.userId === currentUser.id);
+function writeJSON(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
 }
 
-function replaceOwn(key, records) {
-  if (!currentUser) return;
-
-  const all = read(key).filter(
-    item => item.userId !== currentUser.id
-  );
-
-  save(key, [...all, ...records]);
+function emptyData() {
+  return {
+    customers: [],
+    loans: [],
+    payments: [],
+    expenses: [],
+    history: []
+  };
 }
 
-/* =========================================================
-   MENSAGENS
-   ========================================================= */
+let currentUser = null;
+let db = emptyData();
+let toastTimeout = null;
 
-function showMessage(text, error = false, auth = false) {
-  const el = $(auth ? "auth-message" : "app-message");
+function dataKey() {
+  return KEYS.data + currentUser.id;
+}
 
-  if (!el) return;
+function saveData() {
+  if (currentUser) writeJSON(dataKey(), db);
+}
 
-  if (auth) {
-    el.textContent = text;
-    el.className = "message" + (error ? " error" : " success");
+function logAction(action, description) {
+  db.history.unshift({
+    id: uid(),
+    action,
+    description,
+    date: today(),
+    time: new Date().toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit"
+    })
+  });
+
+  db.history = db.history.slice(0, 2000);
+  saveData();
+}
+
+function notify(message, error = false) {
+  const toast = $("toast");
+  if (!toast) {
+    alert(message);
     return;
   }
 
-  el.textContent = text;
-  el.className = "app-message" + (error ? " error" : "");
-  el.hidden = false;
+  toast.textContent = message;
+  toast.classList.add("show");
+  toast.classList.toggle("error", error);
 
-  clearTimeout(messageTimer);
-
-  messageTimer = setTimeout(() => {
-    el.hidden = true;
-  }, 4500);
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => {
+    toast.classList.remove("show", "error");
+  }, 3500);
 }
 
 /* =========================================================
-   SENHAS
+   LOGIN E CADASTRO
    ========================================================= */
 
-async function hashPassword(password) {
+async function passwordHash(password) {
   if (window.crypto?.subtle) {
     try {
       const bytes = new TextEncoder().encode(password);
-
-      const hash = await window.crypto.subtle.digest(
-        "SHA-256",
-        bytes
-      );
-
+      const hash = await crypto.subtle.digest("SHA-256", bytes);
       return Array.from(new Uint8Array(hash))
-        .map(b => b.toString(16).padStart(2, "0"))
+        .map((byte) => byte.toString(16).padStart(2, "0"))
         .join("");
     } catch {
-      console.warn("Não foi possível calcular o hash da senha.");
+      // Usa o método alternativo abaixo.
     }
   }
 
-  return password;
+  return "local:" + password;
 }
 
-/* =========================================================
-   SESSÃO E ENCERRAMENTO ÀS 23H
-   ========================================================= */
-
-function saveLastEmail(email) {
-  try {
-    if (email) {
-      localStorage.setItem(
-        KEYS.lastEmail,
-        email.trim().toLowerCase()
-      );
-    }
-  } catch {}
+function getUsers() {
+  return readJSON(KEYS.users, []);
 }
 
-function restoreLastEmail() {
-  const input = $("login-email");
-  if (!input) return;
+function setAuthMode(mode) {
+  const loginForm = $("loginForm");
+  const registerForm = $("registerForm");
 
-  try {
-    const email = localStorage.getItem(KEYS.lastEmail) || "";
+  if (loginForm) loginForm.hidden = mode !== "login";
+  if (registerForm) registerForm.hidden = mode !== "register";
 
-    if (email && !input.value) {
-      input.value = email;
-    }
-  } catch {}
+  $("loginTab")?.classList.toggle("active", mode === "login");
+  $("registerTab")?.classList.toggle("active", mode === "register");
 }
 
-function stopLogoutTimer() {
-  if (logoutTimer !== null) {
-    clearTimeout(logoutTimer);
-    logoutTimer = null;
+$("loginTab")?.addEventListener("click", () => setAuthMode("login"));
+$("registerTab")?.addEventListener("click", () => setAuthMode("register"));
+
+$("registerForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const name = $("registerName")?.value.trim();
+  const email = $("registerEmail")?.value.trim().toLowerCase();
+  const password = $("registerPassword")?.value;
+  const confirm = $("registerConfirm")?.value;
+
+  if (!name || !email || !password) {
+    notify("Preencha todos os campos.", true);
+    return;
   }
+
+  if (password.length < 4) {
+    notify("A senha precisa ter pelo menos 4 caracteres.", true);
+    return;
+  }
+
+  if (password !== confirm) {
+    notify("As senhas não são iguais.", true);
+    return;
+  }
+
+  const users = getUsers();
+
+  if (users.some((user) => user.email === email)) {
+    notify("Este e-mail já está cadastrado.", true);
+    return;
+  }
+
+  const user = {
+    id: uid(),
+    name,
+    email,
+    password: await passwordHash(password)
+  };
+
+  users.push(user);
+  writeJSON(KEYS.users, users);
+
+  currentUser = user;
+  db = emptyData();
+  saveData();
+
+  openApp();
+  logAction("Cadastro", "Conta criada");
+  notify("Conta criada com sucesso!");
+});
+
+$("loginForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const nameOrEmail = $("loginName")?.value.trim().toLowerCase();
+  const password = $("loginPassword")?.value;
+
+  const users = getUsers();
+  const user = users.find((item) =>
+    item.email === nameOrEmail ||
+    item.name.toLowerCase() === nameOrEmail
+  );
+
+  if (!user) {
+    notify("Conta não encontrada.", true);
+    return;
+  }
+
+  const hash = await passwordHash(password);
+
+  if (user.password !== hash && user.password !== "local:" + password) {
+    notify("Senha incorreta.", true);
+    return;
+  }
+
+  currentUser = user;
+  db = {
+    ...emptyData(),
+    ...readJSON(dataKey(), {})
+  };
+
+  writeJSON(KEYS.session, user.id);
+  openApp();
+});
+
+function openApp() {
+  const auth = $("authScreen");
+  const app = $("appScreen");
+
+  if (auth) auth.hidden = true;
+  if (app) app.hidden = false;
+
+  if ($("sidebarUser")) $("sidebarUser").textContent = currentUser.name;
+  if ($("topUserName")) $("topUserName").textContent = currentUser.name;
+  if ($("todayLabel")) $("todayLabel").textContent = fmtDate(today());
+
+  saveData();
+  renderAll();
+  showPage("dashboard");
 }
 
 function logout() {
-  stopLogoutTimer();
-
-  try {
-    localStorage.removeItem(KEYS.session);
-  } catch {}
-
+  localStorage.removeItem(KEYS.session);
   currentUser = null;
-  currentReceipt = null;
+  db = emptyData();
 
-  if ($("app-screen")) $("app-screen").hidden = true;
-  if ($("auth-screen")) $("auth-screen").hidden = false;
+  if ($("appScreen")) $("appScreen").hidden = true;
+  if ($("authScreen")) $("authScreen").hidden = false;
 
-  switchAuth("login");
-
-  if ($("login-password")) {
-    $("login-password").value = "";
-  }
-
-  restoreLastEmail();
-
-  showMessage(
-    "Sua sessão foi encerrada. Entre novamente no Credifácil.",
-    false,
-    true
-  );
+  setAuthMode("login");
 }
 
-function logoutAtElevenPM() {
-  const now = new Date();
-  const target = new Date(now);
-
-  target.setHours(23, 0, 0, 0);
-
-  if (now.getTime() >= target.getTime()) {
-    target.setDate(target.getDate() + 1);
-  }
-
-  stopLogoutTimer();
-
-  logoutTimer = setTimeout(() => {
-    try {
-      localStorage.setItem(KEYS.logoutDay, today());
-    } catch {}
-
-    if (currentUser) {
-      logout();
-
-      showMessage(
-        "São 23h. Sua sessão foi encerrada.",
-        false,
-        true
-      );
-    }
-
-    logoutAtElevenPM();
-  }, Math.min(target.getTime() - now.getTime(), 2147483647));
-}
-
-function checkSessionAtStartup() {
-  let session = null;
-
-  try {
-    session = JSON.parse(
-      localStorage.getItem(KEYS.session) || "null"
-    );
-  } catch {}
-
-  let logoutDay = "";
-
-  try {
-    logoutDay = localStorage.getItem(KEYS.logoutDay) || "";
-  } catch {}
-
-  const afterEleven = new Date().getHours() >= 23;
-
-  if (session?.userId && afterEleven && logoutDay !== today()) {
-    try {
-      localStorage.setItem(KEYS.logoutDay, today());
-      localStorage.removeItem(KEYS.session);
-    } catch {}
-
-    session = null;
-  }
-
-  if (session?.userId) {
-    currentUser = read(KEYS.users).find(
-      user => user.id === session.userId
-    ) || null;
-  }
-
-  if (currentUser) {
-    showApp();
-  } else {
-    currentUser = null;
-
-    if ($("auth-screen")) $("auth-screen").hidden = false;
-    if ($("app-screen")) $("app-screen").hidden = true;
-
-    switchAuth("login");
-    restoreLastEmail();
-  }
-
-  logoutAtElevenPM();
-}
+$("logoutBtn")?.addEventListener("click", logout);
 
 /* =========================================================
-   CLIENTES, EMPRÉSTIMOS E PAGAMENTOS
+   NAVEGAÇÃO
    ========================================================= */
 
-function getCustomer(customerId) {
-  return ownRecords(KEYS.customers).find(
-    customer => customer.id === customerId
-  );
-}
+function showPage(page) {
+  if (!PAGE_TITLES[page]) page = "dashboard";
 
-function getLoan(loanId) {
-  return ownRecords(KEYS.loans).find(
-    loan => loan.id === loanId
-  );
-}
-
-function getPayments(loanId) {
-  return ownRecords(KEYS.payments).filter(
-    payment => payment.loanId === loanId
-  );
-}
-
-function loanReceived(loanId) {
-  return getPayments(loanId).reduce(
-    (sum, payment) => sum + numberValue(payment.amount),
-    0
-  );
-}
-
-function loanTotal(loan) {
-  return numberValue(loan.total);
-}
-
-function loanBalance(loan) {
-  return Math.max(0, loanTotal(loan) - loanReceived(loan.id));
-}
-
-function isPaid(loan) {
-  return loanBalance(loan) < 0.005;
-}
-
-function customerName(customerId) {
-  return getCustomer(customerId)?.name || "Cliente removido";
-}
-
-function loanLabel(loan) {
-  return `${customerName(loan.customerId)} — saldo ${money(loanBalance(loan))}`;
-}
-
-/* =========================================================
-   CÁLCULOS FINANCEIROS
-   ========================================================= */
-
-function getFinancialTotals() {
-  const loans = ownRecords(KEYS.loans);
-  const payments = ownRecords(KEYS.payments);
-  const expenses = ownRecords(KEYS.expenses);
-
-  const capitalLent = loans.reduce(
-    (sum, loan) => sum + numberValue(loan.amount),
-    0
-  );
-
-  const contractTotal = loans.reduce(
-    (sum, loan) => sum + loanTotal(loan),
-    0
-  );
-
-  const totalReceived = payments.reduce(
-    (sum, payment) => sum + numberValue(payment.amount),
-    0
-  );
-
-  const receivable = loans.reduce(
-    (sum, loan) => sum + loanBalance(loan),
-    0
-  );
-
-  const expensesTotal = expenses.reduce(
-    (sum, expense) => sum + numberValue(expense.amount),
-    0
-  );
-
-  let expectedProfit = 0;
-  let estimatedProfitReceived = 0;
-  let capitalStillOut = 0;
-
-  loans.forEach(loan => {
-    const principal = Math.max(0, numberValue(loan.amount));
-    const total = Math.max(0, loanTotal(loan));
-    const received = Math.min(total, loanReceived(loan.id));
-
-    const profit = Math.max(0, total - principal);
-
-    expectedProfit += profit;
-
-    if (total > 0) {
-      const paidRatio = Math.min(1, received / total);
-
-      estimatedProfitReceived += profit * paidRatio;
-
-      const recoveredCapital = Math.min(
-        principal,
-        principal * paidRatio
-      );
-
-      capitalStillOut += Math.max(
-        0,
-        principal - recoveredCapital
-      );
-    } else {
-      capitalStillOut += principal;
-    }
+  document.querySelectorAll("[data-page]").forEach((element) => {
+    element.classList.toggle("active", element.dataset.page === page);
   });
 
-  const profitStillExpected = Math.max(
-    0,
-    expectedProfit - estimatedProfitReceived
-  );
-
-  const estimatedNetProfit = estimatedProfitReceived - expensesTotal;
-
-  return {
-    capitalLent,
-    contractTotal,
-    totalReceived,
-    receivable,
-    expensesTotal,
-    expectedProfit,
-    estimatedProfitReceived,
-    profitStillExpected,
-    estimatedNetProfit,
-    capitalStillOut
-  };
-}
-
-/* =========================================================
-   PAINEL FINANCEIRO
-   ========================================================= */
-
-function ensureFinancePanel() {
-  const page = $("page-dashboard");
-
-  if (!page || $("finance-panel")) return;
-
-  const panel = document.createElement("section");
-
-  panel.id = "finance-panel";
-  panel.className = "content-card finance-panel";
-
-  panel.innerHTML = `
-    <div class="section-heading">
-      <div>
-        <h2>Meu capital e meus ganhos</h2>
-        <p>Acompanhe o dinheiro emprestado, os recebimentos e o lucro estimado.</p>
-      </div>
-    </div>
-
-    <div class="finance-grid">
-      <div class="finance-item capital">
-        <span class="finance-label">Capital emprestado acumulado</span>
-        <strong id="finance-capital-lent">R$ 0,00</strong>
-        <small>Valor original dos empréstimos cadastrados.</small>
-      </div>
-
-      <div class="finance-item capital">
-        <span class="finance-label">Capital ainda em circulação</span>
-        <strong id="finance-capital-out">R$ 0,00</strong>
-        <small>Estimativa do capital ainda não recuperado.</small>
-      </div>
-
-      <div class="finance-item">
-        <span class="finance-label">Total recebido</span>
-        <strong id="finance-received">R$ 0,00</strong>
-        <small>Soma de todos os pagamentos registrados.</small>
-      </div>
-
-      <div class="finance-item">
-        <span class="finance-label">Falta receber dos contratos</span>
-        <strong id="finance-receivable">R$ 0,00</strong>
-        <small>Saldo total dos contratos em aberto.</small>
-      </div>
-
-      <div class="finance-item profit">
-        <span class="finance-label">Lucro estimado já recebido</span>
-        <strong id="finance-profit-received">R$ 0,00</strong>
-        <small>Estimativa da parte dos recebimentos que corresponde ao ganho.</small>
-      </div>
-
-      <div class="finance-item profit">
-        <span class="finance-label">Lucro estimado dos contratos</span>
-        <strong id="finance-profit-total">R$ 0,00</strong>
-        <small>Ganho previsto nos contratos cadastrados, antes das despesas.</small>
-      </div>
-
-      <div class="finance-item">
-        <span class="finance-label">Lucro previsto ainda não recebido</span>
-        <strong id="finance-profit-pending">R$ 0,00</strong>
-        <small>Estimativa do ganho que falta receber.</small>
-      </div>
-
-      <div class="finance-item">
-        <span class="finance-label">Despesas registradas</span>
-        <strong id="finance-expenses">R$ 0,00</strong>
-        <small>Soma das despesas cadastradas.</small>
-      </div>
-
-      <div class="finance-item profit">
-        <span class="finance-label">Resultado estimado após despesas</span>
-        <strong id="finance-net-profit">R$ 0,00</strong>
-        <small>Lucro estimado recebido menos despesas registradas.</small>
-      </div>
-    </div>
-
-    <p class="finance-note">
-      Atenção: são estimativas baseadas nos contratos e pagamentos registrados.
-      O resultado pode mudar se houver pagamentos atrasados, perdas, descontos
-      ou outras despesas. O capital em circulação também é uma estimativa.
-    </p>
-  `;
-
-  const anchor = $("dashboard-loans")?.closest(".content-card");
-
-  if (anchor && anchor.parentNode === page) {
-    page.insertBefore(panel, anchor);
-  } else {
-    page.appendChild(panel);
-  }
-}
-
-function renderFinancePanel() {
-  ensureFinancePanel();
-
-  const totals = getFinancialTotals();
-
-  const values = {
-    "finance-capital-lent": totals.capitalLent,
-    "finance-capital-out": totals.capitalStillOut,
-    "finance-received": totals.totalReceived,
-    "finance-receivable": totals.receivable,
-    "finance-profit-received": totals.estimatedProfitReceived,
-    "finance-profit-total": totals.expectedProfit,
-    "finance-profit-pending": totals.profitStillExpected,
-    "finance-expenses": totals.expensesTotal,
-    "finance-net-profit": totals.estimatedNetProfit
-  };
-
-  Object.entries(values).forEach(([elementId, value]) => {
-    const element = $(elementId);
-
-    if (element) {
-      element.textContent = money(value);
-    }
+  document.querySelectorAll(".page").forEach((element) => {
+    element.hidden = element.id !== `${page}Page`;
   });
 
-  const net = $("finance-net-profit");
+  if ($("pageTitle")) $("pageTitle").textContent = PAGE_TITLES[page];
 
-  if (net) {
-    net.style.color = totals.estimatedNetProfit < 0
-      ? "var(--danger)"
-      : "var(--success)";
-  }
+  $("sidebar")?.classList.remove("open");
 }
 
-/* =========================================================
-   DATAS E FERIADOS NACIONAIS
-   ========================================================= */
+document.querySelectorAll("[data-page]").forEach((element) => {
+  element.addEventListener("click", () => showPage(element.dataset.page));
+});
 
-/*
- * Feriados nacionais fixos:
- * 01/01 — Confraternização Universal
- * 21/04 — Tiradentes
- * 01/05 — Dia do Trabalho
- * 07/09 — Independência do Brasil
- * 12/10 — Nossa Senhora Aparecida
- * 02/11 — Finados
- * 15/11 — Proclamação da República
- * 20/11 — Dia Nacional de Zumbi e da Consciência Negra
- * 25/12 — Natal
- *
- * Também consideramos a Sexta-feira Santa, calculada a partir
- * da Páscoa. Feriados estaduais e municipais precisam ser
- * adicionados separadamente.
- */
+$("menuBtn")?.addEventListener("click", () => {
+  $("sidebar")?.classList.toggle("open");
+});
 
-function padDatePart(value) {
-  return String(value).padStart(2, "0");
-}
-
-function formatDateISO(date) {
-  return `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`;
-}
-
-function parseDateISO(dateString) {
-  if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-    return null;
-  }
-
-  const [year, month, day] = dateString.split("-").map(Number);
-  const date = new Date(year, month - 1, day);
+document.addEventListener("click", (event) => {
+  const sidebar = $("sidebar");
+  const menuBtn = $("menuBtn");
 
   if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
+    sidebar &&
+    window.innerWidth <= 900 &&
+    sidebar.classList.contains("open") &&
+    !sidebar.contains(event.target) &&
+    !menuBtn?.contains(event.target)
   ) {
-    return null;
+    sidebar.classList.remove("open");
   }
+});
 
-  return date;
-}
+/* =========================================================
+   DATAS E DIAS DE COBRANÇA
+   ========================================================= */
 
-function addDays(dateString, days) {
-  const date = parseDateISO(dateString);
-
-  if (!date) return "";
-
-  date.setDate(date.getDate() + Number(days));
-
-  return formatDateISO(date);
-}
-
-/*
- * Calcula a data da Páscoa pelo método gregoriano.
- */
 function easterDate(year) {
   const a = year % 19;
   const b = Math.floor(year / 100);
@@ -648,1239 +339,1388 @@ function easterDate(year) {
   const month = Math.floor((h + l - 7 * m + 114) / 31);
   const day = ((h + l - 7 * m + 114) % 31) + 1;
 
-  return `${year}-${padDatePart(month)}-${padDatePart(day)}`;
+  return new Date(year, month - 1, day, 12);
 }
 
-/*
- * Retorna as datas de feriados considerados pelo aplicativo.
- */
-function getNationalHolidays(year) {
-  const fixedHolidays = [
-    `${year}-01-01`,
-    `${year}-04-21`,
-    `${year}-05-01`,
-    `${year}-09-07`,
-    `${year}-10-12`,
-    `${year}-11-02`,
-    `${year}-11-15`,
-    `${year}-11-20`,
-    `${year}-12-25`
-  ];
+function fixedDate(year, month, day) {
+  return new Date(year, month - 1, day, 12);
+}
 
+function nationalHolidays(year) {
   const easter = easterDate(year);
-  const goodFriday = addDays(easter, -2);
-
-  return new Set([
-    ...fixedHolidays,
-    goodFriday
-  ]);
-}
-
-/*
- * Para adicionar feriados estaduais ou municipais, inclua
- * as datas no formato AAAA-MM-DD no conjunto abaixo.
- *
- * Exemplo:
- * "2026-10-24"
- */
-const EXTRA_HOLIDAYS = new Set([
-  // "2026-10-24"
-]);
-
-function isSunday(dateString) {
-  const date = parseDateISO(dateString);
-
-  if (!date) return false;
-
-  return date.getDay() === 0;
-}
-
-function isNationalHoliday(dateString) {
-  const date = parseDateISO(dateString);
-
-  if (!date) return false;
-
-  const holidays = getNationalHolidays(date.getFullYear());
-
-  return holidays.has(dateString);
-}
-
-function isExtraHoliday(dateString) {
-  return EXTRA_HOLIDAYS.has(dateString);
-}
-
-function isNonCollectionDay(dateString) {
-  return isSunday(dateString) ||
-    isNationalHoliday(dateString) ||
-    isExtraHoliday(dateString);
-}
-
-function getNonCollectionReason(dateString) {
-  if (isSunday(dateString)) {
-    return "domingo";
-  }
-
-  if (isNationalHoliday(dateString)) {
-    return "feriado nacional";
-  }
-
-  if (isExtraHoliday(dateString)) {
-    return "feriado estadual ou municipal cadastrado";
-  }
-
-  return "";
-}
-
-/*
- * Calcula o vencimento contando somente os dias permitidos
- * para cobrança. A data inicial do contrato não conta como
- * parcela; a contagem começa no dia seguinte.
- */
-function calculateDueDate(startDate, term) {
-  if (!parseDateISO(startDate)) return "";
-
-  let currentDate = startDate;
-  let countedDays = 0;
-  let safety = 0;
-
-  while (countedDays < Number(term) && safety < 1000) {
-    currentDate = addDays(currentDate, 1);
-
-    if (!currentDate) return "";
-
-    if (!isNonCollectionDay(currentDate)) {
-      countedDays++;
-    }
-
-    safety++;
-  }
-
-  return countedDays === Number(term) ? currentDate : "";
-}
-
-function setDefaultDates() {
-  ["loan-date", "payment-date", "expense-date"].forEach(idName => {
-    const input = $(idName);
-
-    if (input && !input.value) {
-      input.value = today();
-    }
-  });
-
-  updateDueDate();
-}
-
-function updateDueDate() {
-  const start = $("loan-date")?.value;
-  const term = numberValue($("loan-term")?.value || 20);
-
-  if (start && $("loan-due-date")) {
-    $("loan-due-date").value = calculateDueDate(start, term);
-  }
-
-  updateLoanPreview();
-}
-
-function updateLoanPreview() {
-  const term = numberValue($("loan-term")?.value || 20);
-  const daily = numberValue($("loan-daily-payment")?.value);
-  const total = Math.round(term * daily * 100) / 100;
-  const dueDate = $("loan-due-date")?.value || "";
-
-  if ($("loan-total-preview")) {
-    $("loan-total-preview").textContent = money(total);
-  }
-
-  if ($("loan-preview-detail")) {
-    $("loan-preview-detail").textContent = daily > 0
-      ? `${term} parcelas de ${money(daily)} em dias permitidos. Total previsto: ${money(total)}. Vencimento final: ${dateBR(dueDate)}.`
-      : `Informe o valor da parcela para ${term} dias de cobrança permitidos.`;
-  }
-}
-
-/* =========================================================
-   LOGIN E CADASTRO — TELAS
-   ========================================================= */
-
-function switchAuth(tab) {
-  if ($("login-form")) {
-    $("login-form").hidden = tab !== "login";
-  }
-
-  if ($("register-form")) {
-    $("register-form").hidden = tab !== "register";
-  }
-
-  document.querySelectorAll("[data-auth-tab]").forEach(button => {
-    button.classList.toggle(
-      "active",
-      button.dataset.authTab === tab
-    );
-  });
-
-  if ($("auth-message")) {
-    $("auth-message").textContent = "";
-  }
-
-  if (tab === "login") {
-    restoreLastEmail();
-  }
-}
-
-function showApp() {
-  if (!currentUser) return;
-
-  if ($("auth-screen")) $("auth-screen").hidden = true;
-  if ($("app-screen")) $("app-screen").hidden = false;
-
-  if ($("sidebar-user-name")) {
-    $("sidebar-user-name").textContent = currentUser.name || "Usuário";
-  }
-
-  if ($("sidebar-user-email")) {
-    $("sidebar-user-email").textContent = currentUser.email || "";
-  }
-
-  if ($("today-label")) {
-    $("today-label").textContent = new Date().toLocaleDateString(
-      "pt-BR",
-      {
-        weekday: "short",
-        day: "2-digit",
-        month: "short",
-        year: "numeric"
-      }
-    );
-  }
-
-  setDefaultDates();
-  ensureFinancePanel();
-  renderAll();
-  navigate("dashboard");
-}
-
-/* =========================================================
-   NAVEGAÇÃO
-   ========================================================= */
-
-function navigate(page) {
-  const validPages = [
-    "dashboard",
-    "customers",
-    "loans",
-    "payments",
-    "expenses",
-    "history"
+  const holidays = [
+    fixedDate(year, 1, 1),
+    fixedDate(year, 4, 21),
+    fixedDate(year, 5, 1),
+    fixedDate(year, 9, 7),
+    fixedDate(year, 10, 12),
+    fixedDate(year, 11, 2),
+    fixedDate(year, 11, 15),
+    fixedDate(year, 11, 20),
+    fixedDate(year, 12, 25)
   ];
 
-  if (!validPages.includes(page)) {
-    page = "dashboard";
+  const carnivalMonday = new Date(easter);
+  carnivalMonday.setDate(easter.getDate() - 48);
+
+  const carnivalTuesday = new Date(easter);
+  carnivalTuesday.setDate(easter.getDate() - 47);
+
+  const goodFriday = new Date(easter);
+  goodFriday.setDate(easter.getDate() - 2);
+
+  const corpusChristi = new Date(easter);
+  corpusChristi.setDate(easter.getDate() + 60);
+
+  holidays.push(carnivalMonday, carnivalTuesday, goodFriday, corpusChristi);
+
+  return holidays.map(localISO);
+}
+
+function isNonPaymentDay(date) {
+  const d = new Date(`${date}T12:00:00`);
+  const day = d.getDay();
+
+  return day === 0 || nationalHolidays(d.getFullYear()).includes(date);
+}
+
+function nextPaymentDay(date) {
+  const d = new Date(`${date}T12:00:00`);
+
+  while (isNonPaymentDay(localISO(d))) {
+    d.setDate(d.getDate() + 1);
   }
 
-  document.querySelectorAll(".page").forEach(section => {
-    section.classList.toggle(
-      "active",
-      section.id === `page-${page}`
-    );
-  });
+  return localISO(d);
+}
 
-  document.querySelectorAll(".nav-link").forEach(button => {
-    button.classList.toggle(
-      "active",
-      button.dataset.page === page
-    );
-  });
+function addCalendarDays(date, days) {
+  const d = new Date(`${date}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return localISO(d);
+}
 
-  const titles = {
-    dashboard: "Painel",
-    customers: "Clientes",
-    loans: "Empréstimos",
-    payments: "Pagamentos",
-    expenses: "Despesas",
-    history: "Histórico"
-  };
+function firstMondayAfter(date) {
+  const d = new Date(`${date}T12:00:00`);
+  d.setDate(d.getDate() + 1);
 
-  if ($("page-title")) {
-    $("page-title").textContent = titles[page];
+  while (d.getDay() !== 1) {
+    d.setDate(d.getDate() + 1);
   }
 
-  if (page === "loans") populateLoanCustomers();
-  if (page === "payments") populatePaymentLoans();
+  return localISO(d);
 }
 
-/* =========================================================
-   TABELAS
-   ========================================================= */
+function installmentDates(start, plan, count) {
+  const dates = [];
+  let date = start;
 
-function emptyTable(message) {
-  return `<div class="empty-state">${escapeHTML(message)}</div>`;
+  for (let i = 0; i < count; i++) {
+    if (plan === "daily20" || plan === "daily24") {
+      if (i === 0) {
+        date = nextPaymentDay(date);
+      } else {
+        date = nextPaymentDay(addCalendarDays(date, 1));
+      }
+    } else {
+      if (i === 0) {
+        date = firstMondayAfter(date);
+      } else {
+        date = addCalendarDays(date, 7);
+        date = nextPaymentDay(date);
+      }
+    }
+
+    dates.push(date);
+  }
+
+  return dates;
 }
 
-function table(headers, rows, emptyMessage) {
-  if (!rows.length) return emptyTable(emptyMessage);
-
-  return `
-    <table>
-      <thead>
-        <tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr>
-      </thead>
-      <tbody>${rows.join("")}</tbody>
-    </table>
-  `;
-}
-
-function actionButton(action, recordId, label, style = "secondary") {
-  return `
-    <button
-      type="button"
-      class="btn ${style} small"
-      data-action="${action}"
-      data-id="${escapeHTML(recordId)}"
-    >${escapeHTML(label)}</button>
-  `;
+function planDetails(plan) {
+  if (plan === "daily20") return { count: 20, label: "Diário — 20 parcelas" };
+  if (plan === "daily24") return { count: 24, label: "Diário — 24 parcelas" };
+  return { count: 3, label: "Semanal — 3 parcelas" };
 }
 
 /* =========================================================
    CLIENTES
    ========================================================= */
 
-function renderCustomers() {
-  if (!$("customers-list")) return;
+function findCustomer(id) {
+  return db.customers.find((customer) => customer.id === id);
+}
 
-  const query = ($("customer-search")?.value || "")
-    .trim()
-    .toLowerCase();
+function customerLoans(customerId) {
+  return db.loans.filter((loan) => loan.customerId === customerId);
+}
 
-  const customers = ownRecords(KEYS.customers)
-    .filter(customer =>
-      `${customer.name} ${customer.phone || ""} ${customer.document || ""}`
-        .toLowerCase()
-        .includes(query)
+function loanPayments(loanId) {
+  return db.payments.filter((payment) => payment.loanId === loanId);
+}
+
+function installmentReceived(loanId, installment) {
+  return db.payments
+    .filter((payment) =>
+      payment.loanId === loanId &&
+      Number(payment.installment) === Number(installment)
     )
-    .sort((a, b) =>
-      String(a.name).localeCompare(String(b.name), "pt-BR")
-    );
-
-  $("customers-list").innerHTML = table(
-    ["Cliente", "Telefone", "CPF", "Empréstimos", "Ações"],
-    customers.map(customer => {
-      const count = ownRecords(KEYS.loans).filter(
-        loan => loan.customerId === customer.id
-      ).length;
-
-      return `
-        <tr>
-          <td>
-            <strong>${escapeHTML(customer.name)}</strong>
-            <small>${escapeHTML(customer.address || "")}</small>
-          </td>
-          <td>${escapeHTML(customer.phone || "—")}</td>
-          <td>${escapeHTML(customer.document || "—")}</td>
-          <td>${count}</td>
-          <td>
-            <div class="table-actions">
-              ${actionButton("delete-customer", customer.id, "Excluir", "danger")}
-            </div>
-          </td>
-        </tr>
-      `;
-    }),
-    "Nenhum cliente cadastrado."
-  );
-
-  populateLoanCustomers();
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
 }
 
-function populateLoanCustomers() {
-  const select = $("loan-customer");
-  if (!select) return;
+function installmentBalance(loan, installment) {
+  const received = installmentReceived(loan.id, installment.number);
+  return Math.max(0, Number(installment.amount) - received);
+}
 
-  const previous = select.value;
+function installmentStatus(loan, installment) {
+  const balance = installmentBalance(loan, installment);
+  if (balance <= 0.009) return "Pago";
 
-  const customers = ownRecords(KEYS.customers).sort(
-    (a, b) => String(a.name).localeCompare(String(b.name), "pt-BR")
+  if (installment.date < today()) return "Atrasado";
+
+  return "Em aberto";
+}
+
+function customerStatus(customerId) {
+  const loans = customerLoans(customerId);
+
+  if (!loans.length) return "Sem empréstimo";
+
+  const installments = loans.flatMap((loan) =>
+    loan.installments.map((installment) => ({
+      loan,
+      installment
+    }))
   );
 
-  select.innerHTML =
-    '<option value="">Selecione um cliente</option>' +
-    customers.map(customer =>
-      `<option value="${escapeHTML(customer.id)}">${escapeHTML(customer.name)}</option>`
-    ).join("");
-
-  if (customers.some(customer => customer.id === previous)) {
-    select.value = previous;
+  if (installments.length && installments.every(({ loan, installment }) =>
+    installmentBalance(loan, installment) <= 0.009
+  )) {
+    return "Quitado";
   }
+
+  if (installments.some(({ loan, installment }) =>
+    installmentStatus(loan, installment) === "Atrasado"
+  )) {
+    return "Atrasado";
+  }
+
+  return "Ativo";
 }
+
+function openCustomerForm(customer = null) {
+  const panel = $("customerFormPanel");
+  if (!panel) return;
+
+  panel.hidden = false;
+
+  $("customerId").value = customer?.id || "";
+  $("customerName").value = customer?.name || "";
+  $("customerPhone").value = customer?.phone || "";
+  $("customerEmail").value = customer?.email || "";
+  $("customerNotes").value = customer?.notes || "";
+
+  panel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+$("newCustomerBtn")?.addEventListener("click", () => openCustomerForm());
+
+$("customerForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+
+  const id = $("customerId").value;
+  const name = $("customerName").value.trim();
+
+  if (!name) {
+    notify("Informe o nome do cliente.", true);
+    return;
+  }
+
+  const customerData = {
+    id: id || uid(),
+    name,
+    phone: $("customerPhone").value.trim(),
+    email: $("customerEmail").value.trim(),
+    notes: $("customerNotes").value.trim(),
+    updatedAt: today()
+  };
+
+  if (id) {
+    const index = db.customers.findIndex((customer) => customer.id === id);
+    if (index >= 0) db.customers[index] = {
+      ...db.customers[index],
+      ...customerData
+    };
+    logAction("Cliente atualizado", name);
+  } else {
+    customerData.createdAt = today();
+    db.customers.push(customerData);
+    logAction("Cliente cadastrado", name);
+  }
+
+  saveData();
+  $("customerForm").reset();
+  $("customerId").value = "";
+
+  if ($("customerFormPanel")) $("customerFormPanel").hidden = true;
+
+  renderAll();
+  notify("Cliente salvo com sucesso!");
+});
+
+function deleteCustomer(id) {
+  const customer = findCustomer(id);
+  if (!customer) return;
+
+  if (customerLoans(id).length) {
+    notify("Este cliente possui empréstimos. Não é possível excluí-lo.", true);
+    return;
+  }
+
+  if (!confirm(`Excluir o cliente ${customer.name}?`)) return;
+
+  db.customers = db.customers.filter((item) => item.id !== id);
+  logAction("Cliente excluído", customer.name);
+  saveData();
+  renderAll();
+  notify("Cliente excluído.");
+}
+
+function renderCustomers() {
+  const list = $("customerList");
+  if (!list) return;
+
+  const search = ($("customerSearch")?.value || "").toLowerCase();
+  const filter = $("customerFilter")?.value || "all";
+
+  const customers = db.customers.filter((customer) => {
+    const matchesSearch =
+      customer.name.toLowerCase().includes(search) ||
+      (customer.phone || "").toLowerCase().includes(search) ||
+      (customer.email || "").toLowerCase().includes(search);
+
+    const status = customerStatus(customer.id);
+    const matchesFilter = filter === "all" ||
+      status.toLowerCase() === filter.toLowerCase();
+
+    return matchesSearch && matchesFilter;
+  });
+
+  if (!customers.length) {
+    list.innerHTML = `<div class="empty-state">Nenhum cliente encontrado.</div>`;
+    return;
+  }
+
+  list.innerHTML = customers.map((customer) => {
+    const status = customerStatus(customer.id);
+    const loans = customerLoans(customer.id);
+    const total = loans.reduce((sum, loan) => sum + loan.total, 0);
+
+    return `
+      <article class="item-card">
+        <div class="item-main">
+          <h3>${escapeHTML(customer.name)}</h3>
+          <p>${escapeHTML(customer.phone || "Sem telefone")}</p>
+          <p>${escapeHTML(customer.email || "")}</p>
+          <p>Empréstimos: ${loans.length} · Total: ${money(total)}</p>
+          <span class="status">${escapeHTML(status)}</span>
+          ${customer.notes ? `<p>${escapeHTML(customer.notes)}</p>` : ""}
+        </div>
+        <div class="item-actions">
+          <button type="button" class="btn-secondary"
+            data-edit-customer="${customer.id}">Editar</button>
+          <button type="button" class="btn-danger"
+            data-delete-customer="${customer.id}">Excluir</button>
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  list.querySelectorAll("[data-edit-customer]").forEach((button) => {
+    button.addEventListener("click", () =>
+      openCustomerForm(findCustomer(button.dataset.editCustomer))
+    );
+  });
+
+  list.querySelectorAll("[data-delete-customer]").forEach((button) => {
+    button.addEventListener("click", () =>
+      deleteCustomer(button.dataset.deleteCustomer)
+    );
+  });
+}
+
+$("customerSearch")?.addEventListener("input", renderCustomers);
+$("customerFilter")?.addEventListener("change", renderCustomers);
 
 /* =========================================================
    EMPRÉSTIMOS
    ========================================================= */
 
-function renderLoans() {
-  if (!$("loans-list")) return;
-
-  const query = ($("loan-search")?.value || "")
-    .trim()
-    .toLowerCase();
-
-  const loans = ownRecords(KEYS.loans)
-    .filter(loan =>
-      customerName(loan.customerId).toLowerCase().includes(query)
-    )
-    .sort((a, b) =>
-      String(b.createdAt || b.date || "")
-        .localeCompare(String(a.createdAt || a.date || ""))
-    );
-
-  $("loans-list").innerHTML = table(
-    [
-      "Cliente / data",
-      "Contrato",
-      "Prazo",
-      "Recebido",
-      "Saldo",
-      "Situação",
-      "Ações"
-    ],
-    loans.map(loan => {
-      const received = loanReceived(loan.id);
-      const balance = loanBalance(loan);
-      const term = loan.term || loan.days || "—";
-      const daily = numberValue(loan.dailyPayment);
-
-      const status = isPaid(loan)
-        ? '<span class="status paid">Quitado</span>'
-        : '<span class="status open">Em aberto</span>';
-
-      return `
-        <tr>
-          <td>
-            <strong>${escapeHTML(customerName(loan.customerId))}</strong>
-            <small>${dateBR(loan.date)}</small>
-          </td>
-          <td>
-            <strong>${money(loanTotal(loan))}</strong>
-            <small>Emprestado: ${money(loan.amount)}</small>
-            ${daily ? `<small>Parcela: ${money(daily)}</small>` : ""}
-          </td>
-          <td>
-            ${escapeHTML(term)}${term !== "—" ? " dias de cobrança" : ""}
-            <small>Final: ${dateBR(loan.dueDate)}</small>
-          </td>
-          <td>${money(received)}</td>
-          <td><strong>${money(balance)}</strong></td>
-          <td>${status}</td>
-          <td>
-            <div class="table-actions">
-              ${!isPaid(loan) ? actionButton("pay-loan", loan.id, "Receber", "primary") : ""}
-              ${actionButton("delete-loan", loan.id, "Excluir", "danger")}
-            </div>
-          </td>
-        </tr>
-      `;
-    }),
-    "Nenhum empréstimo cadastrado."
-  );
-
-  populatePaymentLoans();
+function selectedPlan() {
+  return $("loanPlan")?.value || "daily20";
 }
 
-function populatePaymentLoans() {
-  const select = $("payment-loan");
+function loanCalculation() {
+  const principal = Number($("loanPrincipal")?.value || 0);
+  const interest = Number($("loanInterest")?.value || 0);
+  const plan = planDetails(selectedPlan());
+
+  const total = principal + principal * interest / 100;
+  const installment = plan.count ? total / plan.count : 0;
+
+  return {
+    principal,
+    interest,
+    count: plan.count,
+    total,
+    installment
+  };
+}
+
+function updateLoanPreview() {
+  const calculation = loanCalculation();
+
+  if ($("interestLabel")) {
+    $("interestLabel").textContent = `${calculation.interest}%`;
+  }
+
+  if ($("loanPreviewTotal")) {
+    $("loanPreviewTotal").textContent = money(calculation.total);
+  }
+
+  if ($("loanPreviewInstallment")) {
+    $("loanPreviewInstallment").textContent = money(calculation.installment);
+  }
+
+  if ($("loanPreviewCount")) {
+    $("loanPreviewCount").textContent = calculation.count;
+  }
+
+  if ($("loanPreviewAmount")) {
+    $("loanPreviewAmount").textContent = money(calculation.principal);
+  }
+}
+
+["loanPrincipal", "loanInterest", "loanPlan", "loanStart"].forEach((id) => {
+  $(id)?.addEventListener("input", updateLoanPreview);
+  $(id)?.addEventListener("change", updateLoanPreview);
+});
+
+function refreshLoanCustomerOptions() {
+  const select = $("loanCustomer");
   if (!select) return;
 
-  const previous = select.value;
+  const selected = select.value;
 
-  const loans = ownRecords(KEYS.loans)
-    .filter(loan => !isPaid(loan))
-    .sort((a, b) =>
-      customerName(a.customerId).localeCompare(
-        customerName(b.customerId),
-        "pt-BR"
-      )
-    );
-
-  select.innerHTML =
-    '<option value="">Selecione um empréstimo</option>' +
-    loans.map(loan =>
-      `<option value="${escapeHTML(loan.id)}">${escapeHTML(loanLabel(loan))}</option>`
+  select.innerHTML = `<option value="">Selecione um cliente</option>` +
+    db.customers.map((customer) =>
+      `<option value="${customer.id}">${escapeHTML(customer.name)}</option>`
     ).join("");
 
-  if (loans.some(loan => loan.id === previous)) {
+  if (db.customers.some((customer) => customer.id === selected)) {
+    select.value = selected;
+  }
+}
+
+$("loanForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+
+  const customerId = $("loanCustomer").value;
+  const customer = findCustomer(customerId);
+  const calculation = loanCalculation();
+  const start = $("loanStart")?.value || today();
+  const plan = selectedPlan();
+
+  if (!customer) {
+    notify("Selecione um cliente.", true);
+    return;
+  }
+
+  if (calculation.principal <= 0) {
+    notify("Informe um valor de empréstimo válido.", true);
+    return;
+  }
+
+  if (calculation.interest < 0) {
+    notify("A taxa de juros não pode ser negativa.", true);
+    return;
+  }
+
+  const dates = installmentDates(start, plan, calculation.count);
+
+  const loan = {
+    id: uid(),
+    customerId,
+    principal: calculation.principal,
+    interest: calculation.interest,
+    total: calculation.total,
+    plan,
+    planLabel: planDetails(plan).label,
+    startDate: start,
+    notes: $("loanNotes")?.value.trim() || "",
+    installments: dates.map((date, index) => ({
+      number: index + 1,
+      date,
+      amount: calculation.installment
+    })),
+    createdAt: today()
+  };
+
+  db.loans.push(loan);
+  logAction("Empréstimo criado", `${customer.name} — ${money(loan.total)}`);
+  saveData();
+
+  $("loanForm").reset();
+  if ($("loanStart")) $("loanStart").value = today();
+
+  updateLoanPreview();
+  renderAll();
+  notify("Empréstimo cadastrado com sucesso!");
+});
+
+function deleteLoan(id) {
+  const loan = db.loans.find((item) => item.id === id);
+  if (!loan) return;
+
+  if (loanPayments(id).length) {
+    notify("Este empréstimo possui pagamentos. Exclua os pagamentos primeiro.", true);
+    return;
+  }
+
+  const customer = findCustomer(loan.customerId);
+
+  if (!confirm(`Excluir o empréstimo de ${customer?.name || "cliente"}?`)) return;
+
+  db.loans = db.loans.filter((item) => item.id !== id);
+  logAction("Empréstimo excluído", customer?.name || id);
+  saveData();
+  renderAll();
+  notify("Empréstimo excluído.");
+}
+
+function renderLoans() {
+  const list = $("loanList");
+  if (!list) return;
+
+  if (!db.loans.length) {
+    list.innerHTML = `<div class="empty-state">Nenhum empréstimo cadastrado.</div>`;
+    return;
+  }
+
+  list.innerHTML = db.loans.slice().reverse().map((loan) => {
+    const customer = findCustomer(loan.customerId);
+    const received = loanPayments(loan.id)
+      .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    const balance = Math.max(0, loan.total - received);
+
+    return `
+      <article class="item-card">
+        <div class="item-main">
+          <h3>${escapeHTML(customer?.name || "Cliente excluído")}</h3>
+          <p>${escapeHTML(loan.planLabel || planDetails(loan.plan).label)}</p>
+          <p>Capital: ${money(loan.principal)}</p>
+          <p>Juros: ${Number(loan.interest)}%</p>
+          <p>Total: ${money(loan.total)}</p>
+          <p>Recebido: ${money(received)}</p>
+          <p>Saldo: ${money(balance)}</p>
+          <p>Início: ${fmtDate(loan.startDate)}</p>
+          ${loan.notes ? `<p>${escapeHTML(loan.notes)}</p>` : ""}
+        </div>
+        <div class="item-actions">
+          <button type="button" class="btn-danger"
+            data-delete-loan="${loan.id}">Excluir</button>
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  list.querySelectorAll("[data-delete-loan]").forEach((button) => {
+    button.addEventListener("click", () => deleteLoan(button.dataset.deleteLoan));
+  });
+}
+
+/* =========================================================
+   PAGAMENTOS E PARCELAS
+   ========================================================= */
+
+function refreshPaymentLoanOptions(selectedLoanId = "") {
+  const select = $("paymentLoan");
+  if (!select) return;
+
+  const previous = selectedLoanId || select.value;
+
+  select.innerHTML = `<option value="">Selecione um empréstimo</option>` +
+    db.loans.map((loan) => {
+      const customer = findCustomer(loan.customerId);
+      return `
+        <option value="${loan.id}">
+          ${escapeHTML(customer?.name || "Cliente")} — ${money(loan.total)}
+        </option>
+      `;
+    }).join("");
+
+  if (db.loans.some((loan) => loan.id === previous)) {
     select.value = previous;
   }
 
-  const selected = getLoan(select.value);
-  const amount = $("payment-amount");
-
-  if (selected && amount && !amount.dataset.edited) {
-    amount.value = numberValue(selected.dailyPayment) > 0
-      ? Math.min(
-          numberValue(selected.dailyPayment),
-          loanBalance(selected)
-        ).toFixed(2)
-      : loanBalance(selected).toFixed(2);
-  }
+  refreshInstallmentOptions();
 }
 
+function refreshInstallmentOptions(selectedNumber = "") {
+  const select = $("paymentInstallment");
+  if (!select) return;
+
+  const loanId = $("paymentLoan")?.value;
+  const loan = db.loans.find((item) => item.id === loanId);
+
+  if (!loan) {
+    select.innerHTML = `<option value="">Selecione o empréstimo primeiro</option>`;
+    if ($("paymentAmount")) $("paymentAmount").value = "";
+    return;
+  }
+
+  const previous = selectedNumber || select.value;
+
+  select.innerHTML = loan.installments.map((installment) => {
+    const balance = installmentBalance(loan, installment);
+    const status = installmentStatus(loan, installment);
+
+    return `
+      <option value="${installment.number}" ${balance <= 0.009 ? "disabled" : ""}>
+        Parcela ${installment.number} — ${fmtDate(installment.date)}
+        — ${money(balance)} (${status})
+      </option>
+    `;
+  }).join("");
+
+  if (previous && loan.installments.some((item) =>
+    String(item.number) === String(previous) &&
+    installmentBalance(loan, item) > 0.009
+  )) {
+    select.value = previous;
+  }
+
+  updatePaymentAmount();
+}
+
+function updatePaymentAmount() {
+  const loan = db.loans.find((item) => item.id === $("paymentLoan")?.value);
+  const number = Number($("paymentInstallment")?.value);
+  const installment = loan?.installments.find((item) => item.number === number);
+
+  if (!installment || !$("paymentAmount")) return;
+
+  $("paymentAmount").value = installmentBalance(loan, installment).toFixed(2);
+}
+
+$("paymentLoan")?.addEventListener("change", () => refreshInstallmentOptions());
+$("paymentInstallment")?.addEventListener("change", updatePaymentAmount);
+
+$("paymentForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+
+  const loan = db.loans.find((item) => item.id === $("paymentLoan").value);
+  const number = Number($("paymentInstallment").value);
+  const installment = loan?.installments.find((item) => item.number === number);
+  const amount = Number($("paymentAmount").value);
+  const date = $("paymentDate")?.value || today();
+
+  if (!loan || !installment) {
+    notify("Selecione o empréstimo e a parcela.", true);
+    return;
+  }
+
+  if (amount <= 0) {
+    notify("Informe um valor válido.", true);
+    return;
+  }
+
+  if (amount - installmentBalance(loan, installment) > 0.009) {
+    notify("O valor é maior que o saldo restante desta parcela.", true);
+    return;
+  }
+
+  const customer = findCustomer(loan.customerId);
+
+  const payment = {
+    id: uid(),
+    loanId: loan.id,
+    customerId: loan.customerId,
+    installment: number,
+    amount,
+    date,
+    notes: $("paymentNotes")?.value.trim() || "",
+    createdAt: new Date().toISOString()
+  };
+
+  db.payments.push(payment);
+
+  logAction(
+    "Pagamento registrado",
+    `${customer?.name || "Cliente"} — ${money(amount)} — parcela ${number}`
+  );
+
+  saveData();
+  $("paymentForm").reset();
+
+  if ($("paymentDate")) $("paymentDate").value = today();
+
+  refreshPaymentLoanOptions();
+  renderAll();
+  notify("Pagamento registrado com sucesso!");
+
+  if (confirm("Deseja gerar o recibo deste pagamento em PNG?")) {
+    showReceipt(payment.id);
+  }
+});
+
 /* =========================================================
-   PAGAMENTOS
+   CORRIGIR PAGAMENTO
+   Permite corrigir cliente, empréstimo, parcela, valor e data.
    ========================================================= */
+
+function correctPayment(paymentId) {
+  const payment = db.payments.find((item) => item.id === paymentId);
+  if (!payment) return;
+
+  const oldLoan = db.loans.find((item) => item.id === payment.loanId);
+  if (!oldLoan) {
+    notify("O empréstimo deste pagamento não foi encontrado.", true);
+    return;
+  }
+
+  const customerOptions = db.customers.map((customer, index) =>
+    `${index + 1}. ${customer.name}`
+  ).join("\n");
+
+  if (!db.customers.length) {
+    notify("Cadastre um cliente antes de corrigir o pagamento.", true);
+    return;
+  }
+
+  const currentCustomer = findCustomer(payment.customerId) ||
+    findCustomer(oldLoan.customerId);
+
+  const currentIndex = db.customers.findIndex((customer) =>
+    customer.id === currentCustomer?.id
+  );
+
+  const customerChoice = prompt(
+    "Corrigir pagamento — escolha o número do cliente:\n\n" +
+    customerOptions +
+    "\n\nDigite o número do cliente correto:",
+    String(currentIndex + 1)
+  );
+
+  if (customerChoice === null) return;
+
+  const customerIndex = Number(customerChoice) - 1;
+  const newCustomer = db.customers[customerIndex];
+
+  if (!newCustomer) {
+    notify("Número de cliente inválido.", true);
+    return;
+  }
+
+  const availableLoans = customerLoans(newCustomer.id);
+
+  if (!availableLoans.length) {
+    notify("Este cliente não possui empréstimos cadastrados.", true);
+    return;
+  }
+
+  const loanOptions = availableLoans.map((loan, index) => {
+    const customer = findCustomer(loan.customerId);
+    return `${index + 1}. ${customer?.name || "Cliente"} — ${money(loan.total)} — ${loan.planLabel || loan.plan}`;
+  }).join("\n");
+
+  const existingLoanIndex = availableLoans.findIndex((loan) =>
+    loan.id === payment.loanId
+  );
+
+  const loanChoice = prompt(
+    "Escolha o empréstimo correto:\n\n" + loanOptions +
+    "\n\nDigite o número do empréstimo:",
+    String(existingLoanIndex >= 0 ? existingLoanIndex + 1 : 1)
+  );
+
+  if (loanChoice === null) return;
+
+  const newLoan = availableLoans[Number(loanChoice) - 1];
+
+  if (!newLoan) {
+    notify("Número de empréstimo inválido.", true);
+    return;
+  }
+
+  const installmentOptions = newLoan.installments.map((installment) => {
+    const receivedOtherPayments = db.payments
+      .filter((item) =>
+        item.loanId === newLoan.id &&
+        Number(item.installment) === Number(installment.number) &&
+        item.id !== payment.id
+      )
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
+    const balance = Math.max(0, installment.amount - receivedOtherPayments);
+
+    return `${installment.number}. Parcela ${installment.number} — ${fmtDate(installment.date)} — saldo ${money(balance)}`;
+  }).join("\n");
+
+  const installmentChoice = prompt(
+    "Escolha a parcela correta:\n\n" + installmentOptions +
+    "\n\nDigite o número da parcela:",
+    String(payment.installment)
+  );
+
+  if (installmentChoice === null) return;
+
+  const newInstallment = newLoan.installments.find((item) =>
+    Number(item.number) === Number(installmentChoice)
+  );
+
+  if (!newInstallment) {
+    notify("Número de parcela inválido.", true);
+    return;
+  }
+
+  const otherPayments = db.payments
+    .filter((item) =>
+      item.loanId === newLoan.id &&
+      Number(item.installment) === Number(newInstallment.number) &&
+      item.id !== payment.id
+    )
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
+  const maxAmount = Math.max(0, newInstallment.amount - otherPayments);
+
+  const amountInput = prompt(
+    `Valor do pagamento (máximo ${money(maxAmount)}):`,
+    String(payment.amount)
+  );
+
+  if (amountInput === null) return;
+
+  const newAmount = Number(amountInput.replace(",", "."));
+
+  if (!Number.isFinite(newAmount) || newAmount <= 0 || newAmount - maxAmount > 0.009) {
+    notify("Valor inválido ou superior ao saldo da parcela.", true);
+    return;
+  }
+
+  const newDate = prompt(
+    "Data do pagamento (AAAA-MM-DD):",
+    payment.date || today()
+  );
+
+  if (newDate === null) return;
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+    notify("Data inválida. Use o formato AAAA-MM-DD.", true);
+    return;
+  }
+
+  const newNotes = prompt(
+    "Observações do pagamento:",
+    payment.notes || ""
+  );
+
+  if (newNotes === null) return;
+
+  const oldCustomerName =
+    findCustomer(payment.customerId)?.name ||
+    findCustomer(oldLoan.customerId)?.name ||
+    "Cliente";
+
+  payment.customerId = newCustomer.id;
+  payment.loanId = newLoan.id;
+  payment.installment = newInstallment.number;
+  payment.amount = newAmount;
+  payment.date = newDate;
+  payment.notes = newNotes.trim();
+
+  logAction(
+    "Pagamento corrigido",
+    `${oldCustomerName} → ${newCustomer.name} — ${money(newAmount)}`
+  );
+
+  saveData();
+  renderAll();
+  notify("Pagamento corrigido com sucesso!");
+}
+
+function deletePayment(paymentId) {
+  const payment = db.payments.find((item) => item.id === paymentId);
+  if (!payment) return;
+
+  if (!confirm(`Excluir o pagamento de ${money(payment.amount)}?`)) return;
+
+  const customer =
+    findCustomer(payment.customerId) ||
+    findCustomer(db.loans.find((loan) => loan.id === payment.loanId)?.customerId);
+
+  db.payments = db.payments.filter((item) => item.id !== paymentId);
+
+  logAction(
+    "Pagamento excluído",
+    `${customer?.name || "Cliente"} — ${money(payment.amount)}`
+  );
+
+  saveData();
+  renderAll();
+  notify("Pagamento excluído.");
+}
 
 function renderPayments() {
-  if (!$("payments-list")) return;
+  const list = $("paymentList");
+  if (!list) return;
 
-  const payments = ownRecords(KEYS.payments).sort(
-    (a, b) =>
-      String(b.createdAt || b.date || "")
-        .localeCompare(String(a.createdAt || a.date || ""))
+  const payments = db.payments.slice().sort((a, b) =>
+    (b.date || "").localeCompare(a.date || "") ||
+    (b.createdAt || "").localeCompare(a.createdAt || "")
   );
 
-  $("payments-list").innerHTML = table(
-    ["Data", "Cliente", "Valor", "Empréstimo", "Ações"],
-    payments.map(payment => {
-      const loan = getLoan(payment.loanId);
+  if (!payments.length) {
+    list.innerHTML = `<div class="empty-state">Nenhum pagamento registrado.</div>`;
+    return;
+  }
 
-      return `
-        <tr>
-          <td>${dateBR(payment.date)}</td>
-          <td>
-            <strong>${escapeHTML(loan ? customerName(loan.customerId) : "Empréstimo removido")}</strong>
-          </td>
-          <td><strong>${money(payment.amount)}</strong></td>
-          <td>
-            ${loan ? money(loanTotal(loan)) : "—"}
-            ${loan ? `<small>Saldo atual: ${money(loanBalance(loan))}</small>` : ""}
-          </td>
-          <td>
-            <div class="table-actions">
-              ${actionButton("receipt", payment.id, "Recibo", "secondary")}
-              ${actionButton("delete-payment", payment.id, "Excluir", "danger")}
-            </div>
-          </td>
-        </tr>
-      `;
-    }),
-    "Nenhum pagamento registrado."
-  );
-}
+  list.innerHTML = payments.map((payment) => {
+    const loan = db.loans.find((item) => item.id === payment.loanId);
+    const customer =
+      findCustomer(payment.customerId) ||
+      findCustomer(loan?.customerId);
 
-/* =========================================================
-   RECIBO EM TEXTO
-   ========================================================= */
-
-function receiptText(payment) {
-  const loan = getLoan(payment.loanId);
-  const customer = loan ? getCustomer(loan.customerId) : null;
-
-  return [
-    "RECIBO DE PAGAMENTO — CREDIFÁCIL",
-    "",
-    `Cliente: ${customer?.name || "Cliente"}`,
-    `Valor recebido: ${money(payment.amount)}`,
-    `Data: ${dateBR(payment.date)}`,
-    `Referência: ${payment.notes || "Pagamento de empréstimo"}`,
-    loan ? `Total do contrato: ${money(loanTotal(loan))}` : "",
-    loan ? `Total recebido até agora: ${money(loanReceived(loan.id))}` : "",
-    loan ? `Saldo restante: ${money(loanBalance(loan))}` : "",
-    "",
-    "Recibo de registro de pagamento. Guarde para conferência."
-  ].filter(Boolean).join("\n");
-}
-
-/* =========================================================
-   RECIBO EM IMAGEM
-   ========================================================= */
-
-function ensureReceiptActions() {
-  const content = $("receipt-content");
-  if (!content) return;
-
-  let actions = $("receipt-actions");
-
-  if (!actions) {
-    actions = document.createElement("div");
-    actions.id = "receipt-actions";
-    actions.className = "receipt-actions";
-
-    actions.innerHTML = `
-      <button type="button" class="btn primary" id="receipt-save-image">
-        Salvar comprovante em imagem
-      </button>
-
-      <button type="button" class="btn secondary" id="receipt-share-image">
-        Compartilhar imagem
-      </button>
-
-      <button type="button" class="btn ghost" id="receipt-whatsapp">
-        Enviar mensagem pelo WhatsApp
-      </button>
-
-      <p class="muted small-note" id="receipt-image-status"></p>
+    return `
+      <article class="item-card">
+        <div class="item-main">
+          <h3>${escapeHTML(customer?.name || "Cliente não encontrado")}</h3>
+          <p>Valor: <strong>${money(payment.amount)}</strong></p>
+          <p>Parcela: ${payment.installment}</p>
+          <p>Data: ${fmtDate(payment.date)}</p>
+          ${payment.notes ? `<p>${escapeHTML(payment.notes)}</p>` : ""}
+        </div>
+        <div class="item-actions">
+          <button type="button" class="btn-secondary"
+            data-receipt="${payment.id}">Recibo PNG</button>
+          <button type="button" class="btn-secondary"
+            data-correct-payment="${payment.id}">Corrigir</button>
+          <button type="button" class="btn-danger"
+            data-delete-payment="${payment.id}">Excluir</button>
+        </div>
+      </article>
     `;
+  }).join("");
 
-    content.insertAdjacentElement("afterend", actions);
+  list.querySelectorAll("[data-receipt]").forEach((button) => {
+    button.addEventListener("click", () => showReceipt(button.dataset.receipt));
+  });
 
-    on("receipt-save-image", "click", saveReceiptImage);
-    on("receipt-share-image", "click", shareReceiptImage);
+  list.querySelectorAll("[data-correct-payment]").forEach((button) => {
+    button.addEventListener("click", () =>
+      correctPayment(button.dataset.correctPayment)
+    );
+  });
 
-    on("receipt-whatsapp", "click", () => {
-      if (!currentReceipt) return;
-
-      const text = encodeURIComponent(receiptText(currentReceipt));
-
-      window.open(
-        `https://wa.me/?text=${text}`,
-        "_blank",
-        "noopener,noreferrer"
-      );
-    });
-  }
+  list.querySelectorAll("[data-delete-payment]").forEach((button) => {
+    button.addEventListener("click", () =>
+      deletePayment(button.dataset.deletePayment)
+    );
+  });
 }
 
-function receiptImageData() {
-  if (!currentReceipt) {
-    throw new Error("Nenhum pagamento selecionado.");
-  }
+/* =========================================================
+   RECIBO PNG
+   ========================================================= */
 
-  const payment = currentReceipt;
-  const loan = getLoan(payment.loanId);
-  const customer = loan ? getCustomer(loan.customerId) : null;
+function receiptDetails(paymentId) {
+  const payment = db.payments.find((item) => item.id === paymentId);
+  if (!payment) return null;
 
+  const loan = db.loans.find((item) => item.id === payment.loanId);
+
+  const customer =
+    findCustomer(payment.customerId) ||
+    findCustomer(loan?.customerId);
+
+  return {
+    payment,
+    loan,
+    customer,
+    customerName: customer?.name || "Cliente",
+    customerPhone: customer?.phone || "",
+    paymentDate: fmtDate(payment.date),
+    amount: money(payment.amount),
+    installment: payment.installment,
+    loanTotal: money(loan?.total || 0),
+    notes: payment.notes || "",
+    receiptNumber: payment.id.slice(-8).toUpperCase()
+  };
+}
+
+function drawReceiptCanvas(details) {
   const canvas = document.createElement("canvas");
+  canvas.width = 900;
+  canvas.height = 1120;
+
   const ctx = canvas.getContext("2d");
 
-  if (!ctx) {
-    throw new Error("Seu navegador não conseguiu criar a imagem.");
-  }
+  ctx.fillStyle = "#f4f7fb";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const width = 900;
-  const padding = 60;
-  const rowHeight = 67;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(35, 35, 830, 1050);
+
+  ctx.fillStyle = "#123b6d";
+  ctx.fillRect(35, 35, 830, 190);
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 54px Arial";
+  ctx.fillText("CREDIFÁCIL", 450, 112);
+
+  ctx.font = "28px Arial";
+  ctx.fillText("COMPROVANTE DE PAGAMENTO", 450, 170);
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#223047";
+  ctx.font = "bold 30px Arial";
+  ctx.fillText("RECIBO", 85, 285);
+
+  ctx.font = "22px Arial";
+  ctx.fillStyle = "#64748b";
+  ctx.fillText(`Nº ${details.receiptNumber}`, 85, 325);
+
+  ctx.fillStyle = "#e7eef7";
+  ctx.fillRect(80, 360, 740, 150);
+
+  ctx.fillStyle = "#64748b";
+  ctx.font = "22px Arial";
+  ctx.fillText("VALOR RECEBIDO", 110, 410);
+
+  ctx.fillStyle = "#123b6d";
+  ctx.font = "bold 54px Arial";
+  ctx.fillText(details.amount, 110, 470);
 
   const rows = [
-    ["Cliente", customer?.name || "Cliente"],
-    ["Valor recebido", money(payment.amount)],
-    ["Data do pagamento", dateBR(payment.date)],
-    ["Referência", payment.notes || "Pagamento de empréstimo"]
+    ["Cliente", details.customerName],
+    ["Telefone", details.customerPhone || "Não informado"],
+    ["Data do pagamento", details.paymentDate],
+    ["Parcela", String(details.installment)],
+    ["Valor total do empréstimo", details.loanTotal]
   ];
 
-  if (loan) {
-    rows.push(
-      ["Total do contrato", money(loanTotal(loan))],
-      ["Total recebido", money(loanReceived(loan.id))],
-      ["Saldo restante", money(loanBalance(loan))]
-    );
-  }
+  let y = 585;
 
-  const height = 350 + rows.length * rowHeight + 120;
+  rows.forEach(([label, value]) => {
+    ctx.fillStyle = "#64748b";
+    ctx.font = "21px Arial";
+    ctx.fillText(label, 95, y);
 
-  canvas.width = width;
-  canvas.height = height;
+    ctx.fillStyle = "#223047";
+    ctx.font = "bold 25px Arial";
+    ctx.fillText(String(value).slice(0, 48), 400, y);
 
-  ctx.fillStyle = "#f4f7fa";
-  ctx.fillRect(0, 0, width, height);
-
-  ctx.fillStyle = "#087f8c";
-  ctx.fillRect(0, 0, width, 210);
-
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 46px Arial";
-  ctx.fillText("CREDIFÁCIL", padding, 82);
-
-  ctx.font = "26px Arial";
-  ctx.fillText("COMPROVANTE DE PAGAMENTO", padding, 135);
-
-  ctx.font = "20px Arial";
-  ctx.fillText("Guarde esta imagem para sua conferência.", padding, 174);
-
-  const cardY = 240;
-  const cardHeight = height - cardY - 55;
-
-  ctx.fillStyle = "#ffffff";
-  ctx.beginPath();
-  ctx.roundRect(35, cardY, width - 70, cardHeight, 22);
-  ctx.fill();
-
-  let y = cardY + 55;
-
-  rows.forEach(([label, value], index) => {
-    ctx.fillStyle = "#71818a";
-    ctx.font = "23px Arial";
-    ctx.fillText(label, padding, y);
-
-    ctx.fillStyle = index === 1 ? "#087f8c" : "#182b35";
-    ctx.font = index === 1 ? "bold 30px Arial" : "bold 24px Arial";
-
-    const maxWidth = width - padding * 2;
-    let displayValue = String(value);
-
-    while (
-      ctx.measureText(displayValue).width > maxWidth &&
-      displayValue.length > 4
-    ) {
-      displayValue = displayValue.slice(0, -2) + "…";
-    }
-
-    ctx.fillText(displayValue, padding, y + 34);
-
-    ctx.strokeStyle = "#e2e9ed";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#e2e8f0";
     ctx.beginPath();
-    ctx.moveTo(padding, y + 50);
-    ctx.lineTo(width - padding, y + 50);
+    ctx.moveTo(95, y + 20);
+    ctx.lineTo(805, y + 20);
     ctx.stroke();
 
-    y += rowHeight;
+    y += 75;
   });
 
-  ctx.fillStyle = "#71818a";
-  ctx.font = "18px Arial";
+  if (details.notes) {
+    ctx.fillStyle = "#64748b";
+    ctx.font = "20px Arial";
+    ctx.fillText("Observações:", 95, y + 5);
 
-  ctx.fillText(
-    "Documento de registro. Confira os valores informados.",
-    padding,
-    height - 85
-  );
-
-  ctx.fillStyle = "#087f8c";
-  ctx.font = "bold 20px Arial";
-  ctx.fillText("CrediFácil", padding, height - 48);
-
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(blob => {
-      if (!blob) {
-        reject(new Error("Não foi possível gerar o arquivo de imagem."));
-        return;
-      }
-
-      resolve(blob);
-    }, "image/png");
-  });
-}
-
-async function saveReceiptImage() {
-  if (!currentReceipt) return;
-
-  const button = $("receipt-save-image");
-  const status = $("receipt-image-status");
-
-  if (button) button.disabled = true;
-
-  try {
-    const blob = await receiptImageData();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = url;
-    link.download = `comprovante-credifacil-${currentReceipt.date || today()}.png`;
-
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-
-    setTimeout(() => URL.revokeObjectURL(url), 1500);
-
-    if (status) {
-      status.textContent =
-        "Imagem gerada. Confira a pasta de downloads do seu aparelho.";
-    }
-  } catch (error) {
-    console.error(error);
-
-    if (status) {
-      status.textContent =
-        "Não foi possível salvar a imagem. Tente novamente.";
-    }
-
-    showMessage("Erro ao gerar o comprovante em imagem.", true);
-  } finally {
-    if (button) button.disabled = false;
+    ctx.fillStyle = "#223047";
+    ctx.font = "21px Arial";
+    ctx.fillText(details.notes.slice(0, 60), 95, y + 40);
   }
+
+  ctx.fillStyle = "#64748b";
+  ctx.textAlign = "center";
+  ctx.font = "20px Arial";
+  ctx.fillText("Comprovante gerado pelo sistema CrediFácil", 450, 1025);
+
+  ctx.font = "18px Arial";
+  ctx.fillText(`Emitido em ${new Date().toLocaleString("pt-BR")}`, 450, 1055);
+
+  return canvas;
 }
 
-async function shareReceiptImage() {
-  if (!currentReceipt) return;
+async function showReceipt(paymentId) {
+  const details = receiptDetails(paymentId);
 
-  const button = $("receipt-share-image");
-  const status = $("receipt-image-status");
-
-  if (button) button.disabled = true;
+  if (!details) {
+    notify("Pagamento não encontrado.", true);
+    return;
+  }
 
   try {
-    const blob = await receiptImageData();
+    const canvas = drawReceiptCanvas(details);
 
-    const file = new File(
-      [blob],
-      `comprovante-credifacil-${currentReceipt.date || today()}.png`,
-      { type: "image/png" }
-    );
+    const blob = await new Promise((resolve, reject) => {
+      canvas.toBlob((result) => {
+        if (result) resolve(result);
+        else reject(new Error("Não foi possível criar a imagem."));
+      }, "image/png");
+    });
+
+    const fileName =
+      `recibo-credifacil-${details.receiptNumber}.png`;
+
+    const file = new File([blob], fileName, {
+      type: "image/png"
+    });
 
     if (
       navigator.share &&
       navigator.canShare &&
       navigator.canShare({ files: [file] })
     ) {
-      await navigator.share({
-        files: [file],
-        title: "Comprovante CrediFácil",
-        text: "Comprovante de pagamento."
-      });
+      try {
+        await navigator.share({
+          files: [file],
+          title: "Recibo CrediFácil",
+          text: `Comprovante de pagamento de ${details.customerName}`
+        });
 
-      if (status) {
-        status.textContent = "Compartilhamento aberto.";
-      }
-    } else {
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-
-      link.href = url;
-      link.download = file.name;
-
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-
-      setTimeout(() => URL.revokeObjectURL(url), 1500);
-
-      if (status) {
-        status.textContent =
-          "Seu navegador não permite compartilhar a imagem diretamente. Ela foi preparada para salvar; depois, anexe-a no WhatsApp.";
+        return;
+      } catch (error) {
+        if (error.name === "AbortError") return;
       }
     }
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = fileName;
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+
+    notify("Recibo PNG gerado. Verifique os downloads do aparelho.");
   } catch (error) {
-    if (error?.name === "AbortError") {
-      if (status) status.textContent = "Compartilhamento cancelado.";
-    } else {
-      console.error(error);
-
-      if (status) {
-        status.textContent = "Não foi possível compartilhar a imagem.";
-      }
-
-      showMessage("Erro ao compartilhar o comprovante.", true);
-    }
-  } finally {
-    if (button) button.disabled = false;
+    console.error(error);
+    notify("Não foi possível gerar o recibo PNG.", true);
   }
-}
-
-function openReceipt(paymentId) {
-  const payment = ownRecords(KEYS.payments).find(
-    item => item.id === paymentId
-  );
-
-  if (!payment) {
-    return showMessage("Pagamento não encontrado.", true);
-  }
-
-  currentReceipt = payment;
-
-  const loan = getLoan(payment.loanId);
-  const customer = loan ? getCustomer(loan.customerId) : null;
-
-  if (!$("receipt-content") || !$("receipt-modal")) {
-    return showMessage("A tela do recibo não foi encontrada.", true);
-  }
-
-  $("receipt-content").innerHTML = `
-    <div class="receipt">
-      <div class="receipt-brand">
-        <div class="receipt-brand-mark">CF</div>
-        <div>
-          <h2>CrediFácil</h2>
-          <p class="muted">Comprovante de pagamento</p>
-        </div>
-      </div>
-
-      <div class="receipt-row">
-        <span>Cliente</span>
-        <strong>${escapeHTML(customer?.name || "Cliente")}</strong>
-      </div>
-
-      <div class="receipt-row">
-        <span>Valor recebido</span>
-        <strong>${money(payment.amount)}</strong>
-      </div>
-
-      <div class="receipt-row">
-        <span>Data</span>
-        <strong>${dateBR(payment.date)}</strong>
-      </div>
-
-      <div class="receipt-row">
-        <span>Referência</span>
-        <strong>${escapeHTML(payment.notes || "Pagamento")}</strong>
-      </div>
-
-      ${loan ? `
-        <div class="receipt-row">
-          <span>Total do contrato</span>
-          <strong>${money(loanTotal(loan))}</strong>
-        </div>
-
-        <div class="receipt-row">
-          <span>Total recebido</span>
-          <strong>${money(loanReceived(loan.id))}</strong>
-        </div>
-
-        <div class="receipt-row">
-          <span>Saldo restante</span>
-          <strong>${money(loanBalance(loan))}</strong>
-        </div>
-      ` : ""}
-
-      <p class="muted small-note">
-        Guarde este comprovante para conferência.
-      </p>
-    </div>
-  `;
-
-  ensureReceiptActions();
-
-  if ($("receipt-image-status")) {
-    $("receipt-image-status").textContent = "";
-  }
-
-  $("receipt-modal").hidden = false;
-}
-
-/* =========================================================
-   EXCLUSÕES
-   ========================================================= */
-
-function deleteCustomer(customerId) {
-  const customer = getCustomer(customerId);
-  if (!customer) return;
-
-  const relatedLoans = ownRecords(KEYS.loans).filter(
-    loan => loan.customerId === customerId
-  );
-
-  if (relatedLoans.length) {
-    return showMessage(
-      "Este cliente tem empréstimos vinculados. Exclua primeiro os empréstimos relacionados.",
-      true
-    );
-  }
-
-  if (!confirm(`Deseja excluir o cliente "${customer.name}"?`)) return;
-
-  replaceOwn(
-    KEYS.customers,
-    ownRecords(KEYS.customers).filter(
-      item => item.id !== customerId
-    )
-  );
-
-  renderAll();
-  showMessage("Cliente excluído.");
-}
-
-function deleteLoan(loanId) {
-  const loan = getLoan(loanId);
-  if (!loan) return;
-
-  const relatedPayments = getPayments(loanId);
-
-  let message = `Excluir o empréstimo de ${customerName(loan.customerId)}?`;
-
-  if (relatedPayments.length) {
-    message += "\n\nOs pagamentos relacionados também serão excluídos do histórico.";
-  }
-
-  if (!confirm(message)) return;
-
-  replaceOwn(
-    KEYS.payments,
-    ownRecords(KEYS.payments).filter(
-      payment => payment.loanId !== loanId
-    )
-  );
-
-  replaceOwn(
-    KEYS.loans,
-    ownRecords(KEYS.loans).filter(
-      item => item.id !== loanId
-    )
-  );
-
-  renderAll();
-  showMessage("Empréstimo excluído.");
-}
-
-function deletePayment(paymentId) {
-  const payment = ownRecords(KEYS.payments).find(
-    item => item.id === paymentId
-  );
-
-  if (!payment) {
-    return showMessage("Pagamento não encontrado.", true);
-  }
-
-  const confirmText =
-    `Excluir o pagamento de ${money(payment.amount)} registrado em ${dateBR(payment.date)}?\n\n` +
-    "O saldo e os cálculos financeiros serão atualizados.";
-
-  if (!confirm(confirmText)) return;
-
-  replaceOwn(
-    KEYS.payments,
-    ownRecords(KEYS.payments).filter(
-      item => item.id !== paymentId
-    )
-  );
-
-  renderAll();
-  showMessage("Pagamento excluído. Os valores foram atualizados.");
-}
-
-function deleteExpense(expenseId) {
-  const expense = ownRecords(KEYS.expenses).find(
-    item => item.id === expenseId
-  );
-
-  if (!expense) return;
-
-  if (!confirm(
-    `Excluir a despesa "${expense.description}" de ${money(expense.amount)}?`
-  )) return;
-
-  replaceOwn(
-    KEYS.expenses,
-    ownRecords(KEYS.expenses).filter(
-      item => item.id !== expenseId
-    )
-  );
-
-  renderAll();
-  showMessage("Despesa excluída.");
 }
 
 /* =========================================================
    DESPESAS
    ========================================================= */
 
-function renderExpenses() {
-  if (!$("expenses-list")) return;
+$("expenseForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
 
-  const expenses = ownRecords(KEYS.expenses).sort(
-    (a, b) => String(b.date || "").localeCompare(String(a.date || ""))
-  );
+  const description = $("expenseDescription").value.trim();
+  const amount = Number($("expenseAmount").value);
+  const date = $("expenseDate")?.value || today();
+  const category = $("expenseCategory")?.value || "Geral";
 
-  const total = expenses.reduce(
-    (sum, expense) => sum + numberValue(expense.amount),
-    0
-  );
-
-  if ($("expenses-total")) {
-    $("expenses-total").textContent = money(total);
+  if (!description) {
+    notify("Informe a descrição da despesa.", true);
+    return;
   }
 
-  $("expenses-list").innerHTML = table(
-    ["Data", "Descrição", "Categoria", "Valor", "Ações"],
-    expenses.map(expense => `
-      <tr>
-        <td>${dateBR(expense.date)}</td>
-        <td><strong>${escapeHTML(expense.description)}</strong></td>
-        <td>${escapeHTML(expense.category || "Geral")}</td>
-        <td><strong>${money(expense.amount)}</strong></td>
-        <td>
-          <div class="table-actions">
-            ${actionButton("delete-expense", expense.id, "Excluir", "danger")}
-          </div>
-        </td>
-      </tr>
-    `),
-    "Nenhuma despesa cadastrada."
+  if (!Number.isFinite(amount) || amount <= 0) {
+    notify("Informe um valor válido para a despesa.", true);
+    return;
+  }
+
+  db.expenses.push({
+    id: uid(),
+    description,
+    amount,
+    date,
+    category,
+    createdAt: new Date().toISOString()
+  });
+
+  logAction("Despesa cadastrada", `${description} — ${money(amount)}`);
+  saveData();
+
+  $("expenseForm").reset();
+  if ($("expenseDate")) $("expenseDate").value = today();
+
+  renderAll();
+  notify("Despesa cadastrada.");
+});
+
+function deleteExpense(id) {
+  const expense = db.expenses.find((item) => item.id === id);
+  if (!expense) return;
+
+  if (!confirm(`Excluir a despesa "${expense.description}"?`)) return;
+
+  db.expenses = db.expenses.filter((item) => item.id !== id);
+  logAction("Despesa excluída", expense.description);
+  saveData();
+  renderAll();
+  notify("Despesa excluída.");
+}
+
+function renderExpenses() {
+  const list = $("expenseList");
+  if (!list) return;
+
+  const total = db.expenses.reduce((sum, expense) =>
+    sum + Number(expense.amount || 0), 0
   );
+
+  if ($("expenseTotal")) $("expenseTotal").textContent = money(total);
+
+  if (!db.expenses.length) {
+    list.innerHTML = `<div class="empty-state">Nenhuma despesa cadastrada.</div>`;
+    return;
+  }
+
+  list.innerHTML = db.expenses.slice().sort((a, b) =>
+    (b.date || "").localeCompare(a.date || "")
+  ).map((expense) => `
+    <article class="item-card">
+      <div class="item-main">
+        <h3>${escapeHTML(expense.description)}</h3>
+        <p>Valor: ${money(expense.amount)}</p>
+        <p>Data: ${fmtDate(expense.date)}</p>
+        <p>Categoria: ${escapeHTML(expense.category)}</p>
+      </div>
+      <div class="item-actions">
+        <button type="button" class="btn-danger"
+          data-delete-expense="${expense.id}">Excluir</button>
+      </div>
+    </article>
+  `).join("");
+
+  list.querySelectorAll("[data-delete-expense]").forEach((button) => {
+    button.addEventListener("click", () =>
+      deleteExpense(button.dataset.deleteExpense)
+    );
+  });
 }
 
 /* =========================================================
-   PAINEL PRINCIPAL
+   PAINEL FINANCEIRO
    ========================================================= */
 
+function allInstallments() {
+  return db.loans.flatMap((loan) =>
+    loan.installments.map((installment) => ({
+      loan,
+      installment,
+      balance: installmentBalance(loan, installment),
+      status: installmentStatus(loan, installment)
+    }))
+  );
+}
+
 function renderDashboard() {
-  const loans = ownRecords(KEYS.loans);
-  const payments = ownRecords(KEYS.payments);
-
-  const totalLent = loans.reduce(
-    (sum, loan) => sum + numberValue(loan.amount),
-    0
+  const received = db.payments.reduce((sum, payment) =>
+    sum + Number(payment.amount || 0), 0
   );
 
-  const totalReceived = payments.reduce(
-    (sum, payment) => sum + numberValue(payment.amount),
-    0
+  const principal = db.loans.reduce((sum, loan) =>
+    sum + Number(loan.principal || 0), 0
   );
 
-  const outstanding = loans.reduce(
-    (sum, loan) => sum + loanBalance(loan),
-    0
+  const expected = db.loans.reduce((sum, loan) =>
+    sum + Number(loan.total || 0), 0
   );
 
-  const activeLoans = loans.filter(loan => !isPaid(loan)).length;
+  const expenses = db.expenses.reduce((sum, expense) =>
+    sum + Number(expense.amount || 0), 0
+  );
 
-  if ($("stat-active-loans")) {
-    $("stat-active-loans").textContent = activeLoans;
+  const installments = allInstallments();
+  const paid = installments.filter((item) => item.balance <= 0.009).length;
+  const late = installments.filter((item) => item.status === "Atrasado").length;
+  const open = installments.filter((item) => item.balance > 0.009).length;
+  const percentage = installments.length
+    ? Math.round(paid / installments.length * 100)
+    : 0;
+
+  const values = {
+    statCustomers: db.customers.length,
+    statReceived: money(received),
+    statOpen: money(Math.max(0, expected - received)),
+    statLate: late,
+    statCapital: money(principal),
+    statExpected: money(expected),
+    statExpenses: money(expenses),
+    statCash: money(received - expenses),
+    paidPercentage: `${percentage}%`,
+    statPaidInstallments: paid,
+    statTotalInstallments: installments.length
+  };
+
+  Object.entries(values).forEach(([id, value]) => {
+    if ($(id)) $(id).textContent = value;
+  });
+
+  if ($("paidProgress")) {
+    $("paidProgress").style.width = `${percentage}%`;
   }
 
-  if ($("stat-lent")) {
-    $("stat-lent").textContent = money(totalLent);
-  }
+  const upcomingList = $("upcomingList");
 
-  if ($("stat-received")) {
-    $("stat-received").textContent = money(totalReceived);
-  }
-
-  if ($("stat-outstanding")) {
-    $("stat-outstanding").textContent = money(outstanding);
-  }
-
-  if ($("dashboard-loans")) {
-    const recentLoans = [...loans]
+  if (upcomingList) {
+    const upcoming = installments
+      .filter((item) => item.balance > 0.009)
       .sort((a, b) =>
-        String(b.createdAt || b.date || "")
-          .localeCompare(String(a.createdAt || a.date || ""))
+        a.installment.date.localeCompare(b.installment.date)
       )
-      .slice(0, 5);
+      .slice(0, 8);
 
-    $("dashboard-loans").innerHTML = table(
-      ["Cliente", "Contrato", "Saldo", "Situação"],
-      recentLoans.map(loan => `
-        <tr>
-          <td>
-            <strong>${escapeHTML(customerName(loan.customerId))}</strong>
-            <small>${dateBR(loan.date)}</small>
-          </td>
-          <td>${money(loanTotal(loan))}</td>
-          <td>${money(loanBalance(loan))}</td>
-          <td>
-            ${isPaid(loan)
-              ? '<span class="status paid">Quitado</span>'
-              : '<span class="status open">Em aberto</span>'}
-          </td>
-        </tr>
-      `),
-      "Nenhum empréstimo cadastrado."
-    );
+    upcomingList.innerHTML = upcoming.length
+      ? upcoming.map(({ loan, installment, balance, status }) => {
+          const customer = findCustomer(loan.customerId);
+
+          return `
+            <article class="item-card">
+              <div class="item-main">
+                <h3>${escapeHTML(customer?.name || "Cliente")}</h3>
+                <p>Parcela ${installment.number} · ${fmtDate(installment.date)}</p>
+                <p>Saldo: ${money(balance)}</p>
+                <span class="status">${escapeHTML(status)}</span>
+              </div>
+            </article>
+          `;
+        }).join("")
+      : `<div class="empty-state">Nenhuma parcela pendente.</div>`;
   }
-
-  if ($("dashboard-payments")) {
-    const recentPayments = [...payments]
-      .sort((a, b) =>
-        String(b.createdAt || b.date || "")
-          .localeCompare(String(a.createdAt || a.date || ""))
-      )
-      .slice(0, 5);
-
-    $("dashboard-payments").innerHTML = table(
-      ["Data", "Cliente", "Valor"],
-      recentPayments.map(payment => {
-        const loan = getLoan(payment.loanId);
-
-        return `
-          <tr>
-            <td>${dateBR(payment.date)}</td>
-            <td>${escapeHTML(loan ? customerName(loan.customerId) : "Empréstimo removido")}</td>
-            <td><strong>${money(payment.amount)}</strong></td>
-          </tr>
-        `;
-      }),
-      "Nenhum pagamento registrado."
-    );
-  }
-
-  renderFinancePanel();
 }
 
 /* =========================================================
-   HISTÓRICO
+   HISTÓRICO E EXPORTAÇÃO
    ========================================================= */
 
 function renderHistory() {
-  if (!$("history-list")) return;
+  const list = $("historyList");
+  if (!list) return;
 
-  const payments = ownRecords(KEYS.payments);
-  const expenses = ownRecords(KEYS.expenses);
+  const search = ($("historySearch")?.value || "").toLowerCase();
 
-  const received = payments.reduce(
-    (sum, payment) => sum + numberValue(payment.amount),
-    0
+  const history = db.history.filter((item) =>
+    `${item.action} ${item.description} ${item.date}`
+      .toLowerCase()
+      .includes(search)
   );
 
-  const spent = expenses.reduce(
-    (sum, expense) => sum + numberValue(expense.amount),
-    0
-  );
-
-  if ($("history-received")) {
-    $("history-received").textContent = money(received);
+  if (!history.length) {
+    list.innerHTML = `<div class="empty-state">Nenhum registro no histórico.</div>`;
+    return;
   }
 
-  if ($("history-expenses")) {
-    $("history-expenses").textContent = money(spent);
-  }
-
-  if ($("history-net")) {
-    $("history-net").textContent = money(received - spent);
-  }
-
-  const events = [
-    ...payments.map(payment => ({
-      date: payment.date,
-      sort: payment.createdAt || payment.date,
-      type: "Pagamento recebido",
-      description: customerName(
-        getLoan(payment.loanId)?.customerId
-      ),
-      amount: numberValue(payment.amount),
-      positive: true
-    })),
-
-    ...expenses.map(expense => ({
-      date: expense.date,
-      sort: expense.createdAt || expense.date,
-      type: "Despesa",
-      description: expense.description,
-      amount: numberValue(expense.amount),
-      positive: false
-    })),
-
-    ...ownRecords(KEYS.loans).map(loan => ({
-      date: loan.date,
-      sort: loan.createdAt || loan.date,
-      type: "Empréstimo cadastrado",
-      description: customerName(loan.customerId),
-      amount: numberValue(loan.amount),
-      positive: false
-    }))
-  ].sort((a, b) =>
-    String(b.sort || "").localeCompare(String(a.sort || ""))
-  );
-
-  $("history-list").innerHTML = table(
-    ["Data", "Movimentação", "Descrição", "Valor"],
-    events.map(event => `
-      <tr>
-        <td>${dateBR(event.date)}</td>
-        <td>${escapeHTML(event.type)}</td>
-        <td>${escapeHTML(event.description || "—")}</td>
-        <td><strong>${event.positive ? "+" : ""}${money(event.amount)}</strong></td>
-      </tr>
-    `),
-    "Nenhuma movimentação registrada."
-  );
+  list.innerHTML = history.map((item) => `
+    <article class="item-card">
+      <div class="item-main">
+        <h3>${escapeHTML(item.action)}</h3>
+        <p>${escapeHTML(item.description)}</p>
+        <p>${fmtDate(item.date)} ${escapeHTML(item.time || "")}</p>
+      </div>
+    </article>
+  `).join("");
 }
 
+$("historySearch")?.addEventListener("input", renderHistory);
+
+function exportCSV() {
+  const rows = [
+    ["Tipo", "Cliente", "Descrição", "Valor", "Data", "Detalhes"]
+  ];
+
+  db.customers.forEach((customer) => {
+    rows.push([
+      "Cliente",
+      customer.name,
+      customer.phone || "",
+      "",
+      customer.createdAt || "",
+      customer.email || ""
+    ]);
+  });
+
+  db.loans.forEach((loan) => {
+    const customer = findCustomer(loan.customerId);
+
+    rows.push([
+      "Empréstimo",
+      customer?.name || "",
+      loan.planLabel || loan.plan,
+      loan.total,
+      loan.startDate,
+      `Capital: ${loan.principal}; Juros: ${loan.interest}%`
+    ]);
+  });
+
+  db.payments.forEach((payment) => {
+    const customer =
+      findCustomer(payment.customerId) ||
+      findCustomer(db.loans.find((loan) => loan.id === payment.loanId)?.customerId);
+
+    rows.push([
+      "Pagamento",
+      customer?.name || "",
+      `Parcela ${payment.installment}`,
+      payment.amount,
+      payment.date,
+      payment.notes || ""
+    ]);
+  });
+
+  db.expenses.forEach((expense) => {
+    rows.push([
+      "Despesa",
+      "",
+      expense.description,
+      expense.amount,
+      expense.date,
+      expense.category
+    ]);
+  });
+
+  const csv = rows.map((row) =>
+    row.map((cell) =>
+      `"${String(cell ?? "").replace(/"/g, '""')}"`
+    ).join(";")
+  ).join("\r\n");
+
+  const blob = new Blob(["\uFEFF" + csv], {
+    type: "text/csv;charset=utf-8;"
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = `credifacil-${today()}.csv`;
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+
+  notify("Relatório exportado.");
+}
+
+$("exportBtn")?.addEventListener("click", exportCSV);
+
 /* =========================================================
-   ATUALIZAÇÃO DAS TELAS
+   ATUALIZAÇÃO GERAL
    ========================================================= */
 
 function renderAll() {
-  if (!currentUser) return;
-
-  ensureFinancePanel();
+  refreshLoanCustomerOptions();
+  refreshPaymentLoanOptions();
 
   renderCustomers();
   renderLoans();
@@ -1890,555 +1730,32 @@ function renderAll() {
   renderHistory();
 }
 
-/* =========================================================
-   LOGIN
-   ========================================================= */
+function initialize() {
+  if ($("customerFormPanel")) $("customerFormPanel").hidden = true;
 
-on("login-form", "submit", async event => {
-  event.preventDefault();
+  if ($("loanStart")) $("loanStart").value = today();
+  if ($("paymentDate")) $("paymentDate").value = today();
+  if ($("expenseDate")) $("expenseDate").value = today();
 
-  const email = $("login-email")?.value.trim().toLowerCase() || "";
-  const password = $("login-password")?.value || "";
+  updateLoanPreview();
 
-  if (!email || !password) {
-    return showMessage("Informe seu e-mail e sua senha.", true, true);
-  }
+  const sessionId = readJSON(KEYS.session, null);
+  const users = getUsers();
+  const user = users.find((item) => item.id === sessionId);
 
-  const users = read(KEYS.users);
-
-  const user = users.find(
-    item => String(item.email).toLowerCase() === email
-  );
-
-  if (!user) {
-    return showMessage(
-      "E-mail ou senha incorretos. Se ainda não tem conta, toque em Criar conta.",
-      true,
-      true
-    );
-  }
-
-  const hashed = await hashPassword(password);
-  const storedHash = user.passwordHash ?? user.password;
-
-  if (storedHash !== hashed && storedHash !== password) {
-    return showMessage("E-mail ou senha incorretos.", true, true);
-  }
-
-  currentUser = user;
-  saveLastEmail(email);
-
-  try {
-    localStorage.setItem(
-      KEYS.session,
-      JSON.stringify({
-        userId: user.id,
-        startedAt: new Date().toISOString()
-      })
-    );
-  } catch {
-    currentUser = null;
-
-    return showMessage(
-      "Não foi possível salvar a sessão. Verifique o armazenamento do navegador.",
-      true,
-      true
-    );
-  }
-
-  showApp();
-  showMessage("Bem-vindo ao Credifácil!");
-});
-
-/* =========================================================
-   CRIAR CONTA
-   ========================================================= */
-
-on("register-form", "submit", async event => {
-  event.preventDefault();
-
-  const name = $("register-name")?.value.trim() || "";
-  const email = $("register-email")?.value.trim().toLowerCase() || "";
-  const password = $("register-password")?.value || "";
-
-  if (name.length < 2) {
-    return showMessage("Informe seu nome completo.", true, true);
-  }
-
-  if (!email || !email.includes("@") || !email.includes(".")) {
-    return showMessage("Informe um e-mail válido.", true, true);
-  }
-
-  if (password.length < 4) {
-    return showMessage(
-      "A senha precisa ter pelo menos 4 caracteres.",
-      true,
-      true
-    );
-  }
-
-  const users = read(KEYS.users);
-
-  if (users.some(
-    user => String(user.email).toLowerCase() === email
-  )) {
-    return showMessage(
-      "Já existe uma conta com esse e-mail. Entre pela tela de login.",
-      true,
-      true
-    );
-  }
-
-  const user = {
-    id: id(),
-    name,
-    email,
-    passwordHash: await hashPassword(password),
-    createdAt: new Date().toISOString()
-  };
-
-  try {
-    users.push(user);
-    save(KEYS.users, users);
-
+  if (user) {
     currentUser = user;
-    saveLastEmail(email);
-
-    localStorage.setItem(
-      KEYS.session,
-      JSON.stringify({
-        userId: user.id,
-        startedAt: new Date().toISOString()
-      })
-    );
-  } catch {
-    currentUser = null;
-
-    return showMessage(
-      "Não foi possível criar a conta. Verifique o armazenamento disponível.",
-      true,
-      true
-    );
-  }
-
-  showApp();
-  showMessage("Conta criada com sucesso!");
-});
-
-/* =========================================================
-   CADASTRAR CLIENTE
-   ========================================================= */
-
-on("customer-form", "submit", event => {
-  event.preventDefault();
-
-  if (!currentUser) {
-    return showMessage("Entre no Credifácil primeiro.", true);
-  }
-
-  const name = $("customer-name")?.value.trim() || "";
-
-  if (!name) {
-    return showMessage("Informe o nome do cliente.", true);
-  }
-
-  const customer = {
-    id: id(),
-    userId: currentUser.id,
-    name,
-    phone: $("customer-phone")?.value.trim() || "",
-    document: $("customer-document")?.value.trim() || "",
-    address: $("customer-address")?.value.trim() || "",
-    notes: $("customer-notes")?.value.trim() || "",
-    createdAt: new Date().toISOString()
-  };
-
-  try {
-    save(KEYS.customers, [...read(KEYS.customers), customer]);
-  } catch {
-    return showMessage(
-      "Não foi possível salvar o cliente. Verifique o espaço disponível.",
-      true
-    );
-  }
-
-  $("customer-form").reset();
-
-  renderAll();
-  showMessage("Cliente cadastrado com sucesso!");
-});
-
-/* =========================================================
-   CADASTRAR EMPRÉSTIMO
-   ========================================================= */
-
-on("loan-form", "submit", event => {
-  event.preventDefault();
-
-  if (!currentUser) {
-    return showMessage("Entre no Credifácil primeiro.", true);
-  }
-
-  const customerId = $("loan-customer")?.value || "";
-  const amount = numberValue($("loan-amount")?.value);
-  const rate = numberValue($("loan-interest")?.value);
-  const term = numberValue($("loan-term")?.value);
-  const dailyPayment = numberValue($("loan-daily-payment")?.value);
-  const date = $("loan-date")?.value || "";
-
-  if (!getCustomer(customerId)) {
-    return showMessage("Selecione um cliente cadastrado.", true);
-  }
-
-  if (amount <= 0) {
-    return showMessage("Informe um valor de empréstimo válido.", true);
-  }
-
-  if (![20, 25].includes(term)) {
-    return showMessage("Selecione um prazo de 20 ou 25 dias.", true);
-  }
-
-  if (dailyPayment <= 0) {
-    return showMessage("Informe o valor da parcela diária.", true);
-  }
-
-  if (!parseDateISO(date)) {
-    return showMessage("Informe uma data válida para o empréstimo.", true);
-  }
-
-  const dueDate = calculateDueDate(date, term);
-
-  if (!dueDate) {
-    return showMessage("Não foi possível calcular o vencimento.", true);
-  }
-
-  const total = Math.round(dailyPayment * term * 100) / 100;
-
-  const loan = {
-    id: id(),
-    userId: currentUser.id,
-    customerId,
-    amount,
-    rate,
-    term,
-    days: term,
-    dailyPayment,
-    total,
-    date,
-    dueDate,
-    notes: $("loan-notes")?.value.trim() || "",
-    createdAt: new Date().toISOString()
-  };
-
-  try {
-    save(KEYS.loans, [...read(KEYS.loans), loan]);
-  } catch {
-    return showMessage("Não foi possível salvar o empréstimo.", true);
-  }
-
-  $("loan-form").reset();
-
-  if ($("loan-date")) $("loan-date").value = today();
-  if ($("loan-term")) $("loan-term").value = "20";
-
-  updateDueDate();
-  renderAll();
-
-  showMessage(
-    `Empréstimo cadastrado. São ${term} parcelas em dias permitidos, com vencimento final em ${dateBR(dueDate)}. Total: ${money(total)}.`
-  );
-});
-
-/* =========================================================
-   REGISTRAR PAGAMENTO
-   ========================================================= */
-
-on("payment-form", "submit", event => {
-  event.preventDefault();
-
-  if (!currentUser) {
-    return showMessage("Entre no Credifácil primeiro.", true);
-  }
-
-  const loanId = $("payment-loan")?.value || "";
-  const loan = getLoan(loanId);
-  const amount = numberValue($("payment-amount")?.value);
-  const date = $("payment-date")?.value || "";
-
-  if (!loan) {
-    return showMessage("Selecione um empréstimo em aberto.", true);
-  }
-
-  if (amount <= 0) {
-    return showMessage("Informe um valor de pagamento válido.", true);
-  }
-
-  if (!parseDateISO(date)) {
-    return showMessage("Informe uma data válida para o pagamento.", true);
-  }
-
-  if (isNonCollectionDay(date)) {
-    const reason = getNonCollectionReason(date);
-
-    return showMessage(
-      `Não é permitido registrar cobrança em ${dateBR(date)} porque é ${reason}. Escolha outro dia.`,
-      true
-    );
-  }
-
-  const balance = loanBalance(loan);
-
-  if (amount > balance + 0.005) {
-    return showMessage(
-      `O pagamento não pode ser maior que o saldo restante (${money(balance)}).`,
-      true
-    );
-  }
-
-  const payment = {
-    id: id(),
-    userId: currentUser.id,
-    loanId,
-    amount: Math.round(amount * 100) / 100,
-    date,
-    notes: $("payment-notes")?.value.trim() || "",
-    createdAt: new Date().toISOString()
-  };
-
-  try {
-    save(KEYS.payments, [...read(KEYS.payments), payment]);
-  } catch {
-    return showMessage("Não foi possível salvar o pagamento.", true);
-  }
-
-  $("payment-form").reset();
-
-  if ($("payment-date")) {
-    $("payment-date").value = today();
-  }
-
-  if ($("payment-amount")) {
-    $("payment-amount").dataset.edited = "";
-  }
-
-  renderAll();
-  openReceipt(payment.id);
-
-  showMessage("Pagamento registrado. Confira o comprovante.");
-});
-
-/* =========================================================
-   CADASTRAR DESPESA
-   ========================================================= */
-
-on("expense-form", "submit", event => {
-  event.preventDefault();
-
-  if (!currentUser) {
-    return showMessage("Entre no Credifácil primeiro.", true);
-  }
-
-  const description = $("expense-description")?.value.trim() || "";
-  const amount = numberValue($("expense-amount")?.value);
-  const date = $("expense-date")?.value || "";
-
-  if (!description || amount <= 0 || !date) {
-    return showMessage(
-      "Preencha a descrição, o valor e a data da despesa.",
-      true
-    );
-  }
-
-  const expense = {
-    id: id(),
-    userId: currentUser.id,
-    description,
-    amount,
-    date,
-    category: $("expense-category")?.value || "Geral",
-    createdAt: new Date().toISOString()
-  };
-
-  try {
-    save(KEYS.expenses, [...read(KEYS.expenses), expense]);
-  } catch {
-    return showMessage("Não foi possível salvar a despesa.", true);
-  }
-
-  $("expense-form").reset();
-
-  if ($("expense-date")) {
-    $("expense-date").value = today();
-  }
-
-  renderAll();
-  showMessage("Despesa cadastrada.");
-});
-
-/* =========================================================
-   ABAS DE LOGIN E CADASTRO
-   ========================================================= */
-
-document.querySelectorAll("[data-auth-tab]").forEach(button => {
-  button.addEventListener("click", () => {
-    switchAuth(button.dataset.authTab);
-  });
-});
-
-/* =========================================================
-   BOTÕES DE NAVEGAÇÃO
-   ========================================================= */
-
-document.querySelectorAll("[data-page]").forEach(button => {
-  button.addEventListener("click", () => {
-    navigate(button.dataset.page);
-  });
-});
-
-document.querySelectorAll("[data-go]").forEach(button => {
-  button.addEventListener("click", () => {
-    navigate(button.dataset.go);
-  });
-});
-
-on("logout-btn", "click", logout);
-
-/* =========================================================
-   ATUALIZAÇÃO DE PRAZO E VALORES
-   ========================================================= */
-
-on("loan-term", "change", updateDueDate);
-on("loan-date", "change", updateDueDate);
-on("loan-daily-payment", "input", updateLoanPreview);
-
-on("payment-loan", "change", () => {
-  const loan = getLoan($("payment-loan")?.value);
-  const input = $("payment-amount");
-
-  if (!input) return;
-
-  input.dataset.edited = "";
-
-  if (loan) {
-    input.value = Math.min(
-      numberValue(loan.dailyPayment) || loanBalance(loan),
-      loanBalance(loan)
-    ).toFixed(2);
+    db = {
+      ...emptyData(),
+      ...readJSON(dataKey(), {})
+    };
+
+    openApp();
   } else {
-    input.value = "";
+    if ($("appScreen")) $("appScreen").hidden = true;
+    if ($("authScreen")) $("authScreen").hidden = false;
+    setAuthMode("login");
   }
-});
-
-on("payment-amount", "input", event => {
-  event.target.dataset.edited = "1";
-});
-
-on("customer-search", "input", renderCustomers);
-on("loan-search", "input", renderLoans);
-
-/* =========================================================
-   AÇÕES DAS TABELAS
-   ========================================================= */
-
-document.addEventListener("click", event => {
-  const button = event.target.closest("[data-action]");
-
-  if (!button) return;
-
-  const { action, id: recordId } = button.dataset;
-
-  switch (action) {
-    case "delete-customer":
-      deleteCustomer(recordId);
-      break;
-
-    case "delete-loan":
-      deleteLoan(recordId);
-      break;
-
-    case "delete-payment":
-      deletePayment(recordId);
-      break;
-
-    case "delete-expense":
-      deleteExpense(recordId);
-      break;
-
-    case "receipt":
-      openReceipt(recordId);
-      break;
-
-    case "pay-loan":
-      navigate("payments");
-
-      if ($("payment-loan")) {
-        $("payment-loan").value = recordId;
-        $("payment-loan").dispatchEvent(new Event("change"));
-      }
-
-      $("payment-amount")?.focus();
-      break;
-  }
-});
-
-/* =========================================================
-   MODAL DO RECIBO
-   ========================================================= */
-
-on("receipt-close", "click", () => {
-  if ($("receipt-modal")) {
-    $("receipt-modal").hidden = true;
-  }
-
-  currentReceipt = null;
-});
-
-on("receipt-modal", "click", event => {
-  if (event.target === $("receipt-modal")) {
-    $("receipt-modal").hidden = true;
-    currentReceipt = null;
-  }
-});
-
-/* =========================================================
-   PROTEGER A SESSÃO AO VOLTAR PARA O APLICATIVO
-   ========================================================= */
-
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState !== "visible") return;
-
-  const now = new Date();
-
-  let logoutDay = "";
-
-  try {
-    logoutDay = localStorage.getItem(KEYS.logoutDay) || "";
-  } catch {}
-
-  if (currentUser && now.getHours() >= 23 && logoutDay !== today()) {
-    try {
-      localStorage.setItem(KEYS.logoutDay, today());
-    } catch {}
-
-    logout();
-
-    showMessage(
-      "Sua sessão foi encerrada às 23h. Entre novamente no Credifácil.",
-      false,
-      true
-    );
-  }
-});
-
-/* =========================================================
-   INICIALIZAÇÃO
-   ========================================================= */
-
-function init() {
-  restoreLastEmail();
-  setDefaultDates();
-  ensureFinancePanel();
-  checkSessionAtStartup();
 }
 
-init();
+initialize();
