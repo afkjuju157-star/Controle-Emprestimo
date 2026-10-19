@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -15,12 +14,17 @@
       <div class="brand-mark">CF</div>
       <h1>Credi<span>Fácil</span></h1>
       <p>Entre na sua conta para continuar.</p>
+
       <label for="login-email">E-mail</label>
       <input id="login-email" type="email" autocomplete="username" required>
+
       <label for="login-password">Senha</label>
       <input id="login-password" type="password" autocomplete="current-password" required>
+
       <button type="submit">Entrar</button>
-      <p class="auth-switch">Ainda não tem conta?
+
+      <p class="auth-switch">
+        Ainda não tem conta?
         <button type="button" id="show-register" class="link-button">Criar conta</button>
       </p>
       <p id="login-message" class="message" role="status"></p>
@@ -32,16 +36,23 @@
       <div class="brand-mark">CF</div>
       <h1>Criar conta</h1>
       <p>Cadastre-se para começar a usar o CrediFácil.</p>
+
       <label for="register-name">Nome</label>
       <input id="register-name" type="text" autocomplete="name" required>
+
       <label for="register-email">E-mail</label>
       <input id="register-email" type="email" autocomplete="email" required>
+
       <label for="register-password">Senha</label>
       <input id="register-password" type="password" minlength="6" autocomplete="new-password" required>
+
       <label for="register-confirm">Confirmar senha</label>
       <input id="register-confirm" type="password" minlength="6" autocomplete="new-password" required>
+
       <button type="submit">Cadastrar</button>
-      <p class="auth-switch">Já tem uma conta?
+
+      <p class="auth-switch">
+        Já tem uma conta?
         <button type="button" id="show-login" class="link-button">Fazer login</button>
       </p>
       <p id="register-message" class="message" role="status"></p>
@@ -72,7 +83,11 @@
       <main class="main-content">
         <section id="page-dashboard" class="page active">
           <div class="page-heading">
-            <div><p class="eyebrow">VISÃO GERAL</p><h2>Dashboard</h2><p>Acompanhe os resultados da sua carteira.</p></div>
+            <div>
+              <p class="eyebrow">VISÃO GERAL</p>
+              <h2>Dashboard</h2>
+              <p>Acompanhe os resultados da sua carteira.</p>
+            </div>
           </div>
 
           <div class="stats-grid">
@@ -119,58 +134,148 @@
           </div>
 
           <div class="content-card">
-            <div class="section-heading"><div><h3>Pagamentos recentes</h3><p>Últimos pagamentos lançados.</p></div></div>
+            <div class="section-heading">
+              <div>
+                <h3>Pagamentos recentes</h3>
+                <p>Últimos pagamentos lançados.</p>
+              </div>
+            </div>
             <div id="dashboard-payments" class="table-wrap"></div>
           </div>
         </section>
 
         <section id="page-customers" class="page">
-          <div class="page-heading"><div><p class="eyebrow">CADASTRO</p><h2>Clientes</h2><p>Cadastre e gerencie seus clientes.</p></div></div>
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">CADASTRO</p>
+              <h2>Clientes</h2>
+              <p>Cadastre e gerencie seus clientes.</p>
+            </div>
+          </div>
+
           <div class="content-card">
             <h3 id="customer-form-title">Novo cliente</h3>
             <form id="customer-form" class="form-grid">
               <input type="hidden" id="customer-id">
-              <div><label for="customer-name">Nome completo *</label><input id="customer-name" required maxlength="120"></div>
-              <div><label for="customer-phone">Telefone</label><input id="customer-phone" type="tel"></div>
-              <div><label for="customer-document">CPF</label><input id="customer-document" inputmode="numeric"></div>
-              <div><label for="customer-address">Endereço</label><input id="customer-address"></div>
-              <div class="form-actions"><button type="submit">Salvar cliente</button><button type="button" id="customer-cancel" class="button-outline">Limpar</button></div>
+              <div>
+                <label for="customer-name">Nome completo *</label>
+                <input id="customer-name" required maxlength="120">
+              </div>
+              <div>
+                <label for="customer-phone">Telefone</label>
+                <input id="customer-phone" type="tel">
+              </div>
+              <div>
+                <label for="customer-document">CPF</label>
+                <input id="customer-document" inputmode="numeric">
+              </div>
+              <div>
+                <label for="customer-address">Endereço</label>
+                <input id="customer-address">
+              </div>
+              <div class="form-actions">
+                <button type="submit">Salvar cliente</button>
+                <button type="button" id="customer-cancel" class="button-outline">Limpar</button>
+              </div>
             </form>
           </div>
+
           <div class="content-card">
-            <div class="section-heading"><h3>Clientes cadastrados</h3><input id="customer-search" class="search-input" placeholder="Buscar cliente..."></div>
+            <div class="section-heading">
+              <h3>Clientes cadastrados</h3>
+              <input id="customer-search" class="search-input" placeholder="Buscar cliente...">
+            </div>
             <div id="customers-list" class="table-wrap"></div>
           </div>
         </section>
 
         <section id="page-installments" class="page">
-          <div class="page-heading"><div><p class="eyebrow">CRÉDITO</p><h2>Empréstimos e pagamentos</h2><p>Registre empréstimos e acompanhe as parcelas.</p></div></div>
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">CRÉDITO</p>
+              <h2>Empréstimos e pagamentos</h2>
+              <p>Registre empréstimos e acompanhe as parcelas.</p>
+            </div>
+          </div>
+
           <div class="content-card">
             <h3>Novo empréstimo</h3>
             <form id="loan-form" class="form-grid">
-              <div><label for="loan-customer">Cliente *</label><select id="loan-customer" required><option value="">Selecione um cliente</option></select></div>
-              <div><label for="loan-amount">Valor emprestado (R$) *</label><input id="loan-amount" type="number" min="0.01" step="0.01" required></div>
-              <div><label for="loan-interest">Juros (%)</label><input id="loan-interest" type="number" min="0" step="0.01" value="0"></div>
-              <div><label for="loan-installments">Número de parcelas *</label><input id="loan-installments" type="number" min="1" max="600" value="1" required></div>
-              <div><label for="loan-frequency">Frequência</label><select id="loan-frequency"><option value="daily">Diária</option><option value="weekly">Semanal</option><option value="monthly">Mensal</option></select></div>
-              <div><label for="loan-start-date">Data do empréstimo *</label><input id="loan-start-date" type="date" required></div>
-              <div class="form-actions"><button type="submit">Cadastrar empréstimo</button></div>
+              <div>
+                <label for="loan-customer">Cliente *</label>
+                <select id="loan-customer" required>
+                  <option value="">Selecione um cliente</option>
+                </select>
+              </div>
+              <div>
+                <label for="loan-amount">Valor emprestado (R$) *</label>
+                <input id="loan-amount" type="number" min="0.01" step="0.01" required>
+              </div>
+              <div>
+                <label for="loan-interest">Juros (%)</label>
+                <input id="loan-interest" type="number" min="0" step="0.01" value="0">
+              </div>
+              <div>
+                <label for="loan-installments">Número de parcelas *</label>
+                <input id="loan-installments" type="number" min="1" max="600" value="1" required>
+              </div>
+              <div>
+                <label for="loan-frequency">Frequência</label>
+                <select id="loan-frequency">
+                  <option value="daily">Diária</option>
+                  <option value="weekly">Semanal</option>
+                  <option value="monthly">Mensal</option>
+                </select>
+              </div>
+              <div>
+                <label for="loan-start-date">Data do empréstimo *</label>
+                <input id="loan-start-date" type="date" required>
+              </div>
+              <div class="form-actions">
+                <button type="submit">Cadastrar empréstimo</button>
+              </div>
             </form>
           </div>
+
           <div class="content-card">
-            <div class="section-heading"><h3>Empréstimos cadastrados</h3><input id="loan-search" class="search-input" placeholder="Buscar cliente..."></div>
+            <div class="section-heading">
+              <h3>Empréstimos cadastrados</h3>
+              <input id="loan-search" class="search-input" placeholder="Buscar cliente...">
+            </div>
             <div id="loans-list" class="table-wrap"></div>
           </div>
+
           <div class="content-card">
             <h3>Registrar pagamento</h3>
             <form id="payment-form" class="form-grid">
-              <div><label for="payment-loan">Empréstimo *</label><select id="payment-loan" required><option value="">Selecione um empréstimo</option></select></div>
-              <div><label for="payment-amount">Valor recebido (R$) *</label><input id="payment-amount" type="number" min="0.01" step="0.01" required></div>
-              <div><label for="payment-date">Data do pagamento *</label><input id="payment-date" type="date" required></div>
-              <div><label for="payment-notes">Observação</label><input id="payment-notes" maxlength="250"></div>
-              <div class="form-actions"><button type="submit">Registrar pagamento</button></div>
+              <div>
+                <label for="payment-loan">Empréstimo *</label>
+                <select id="payment-loan" required>
+                  <option value="">Selecione um empréstimo</option>
+                </select>
+              </div>
+              <div>
+                <label for="payment-installment-value">Valor da parcela (R$)</label>
+                <input id="payment-installment-value" type="text" readonly placeholder="Selecione um empréstimo">
+              </div>
+              <div>
+                <label for="payment-amount">Valor recebido (R$) *</label>
+                <input id="payment-amount" type="number" min="0.01" step="0.01" required>
+              </div>
+              <div>
+                <label for="payment-date">Data do pagamento *</label>
+                <input id="payment-date" type="date" required>
+              </div>
+              <div>
+                <label for="payment-notes">Observação</label>
+                <input id="payment-notes" maxlength="250">
+              </div>
+              <div class="form-actions">
+                <button type="submit">Registrar pagamento</button>
+              </div>
             </form>
           </div>
+
           <div class="content-card">
             <h3>Histórico de pagamentos</h3>
             <p class="muted">Use Editar para corrigir o cliente, empréstimo, valor ou data. Excluir remove o lançamento.</p>
@@ -179,29 +284,72 @@
         </section>
 
         <section id="page-expenses" class="page">
-          <div class="page-heading"><div><p class="eyebrow">CONTROLE</p><h2>Despesas</h2><p>Registre os gastos da operação.</p></div></div>
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">CONTROLE FINANCEIRO</p>
+              <h2>Despesas</h2>
+              <p>Registre os gastos do seu negócio.</p>
+            </div>
+          </div>
+
           <div class="content-card">
             <h3>Nova despesa</h3>
             <form id="expense-form" class="form-grid">
-              <div><label for="expense-description">Descrição *</label><input id="expense-description" required maxlength="150"></div>
-              <div><label for="expense-amount">Valor (R$) *</label><input id="expense-amount" type="number" min="0.01" step="0.01" required></div>
-              <div><label for="expense-date">Data *</label><input id="expense-date" type="date" required></div>
-              <div><label for="expense-category">Categoria</label><select id="expense-category"><option>Geral</option><option>Transporte</option><option>Alimentação</option><option>Operacional</option><option>Outros</option></select></div>
-              <div class="form-actions"><button type="submit">Salvar despesa</button></div>
+              <div>
+                <label for="expense-description">Descrição *</label>
+                <input id="expense-description" required maxlength="150">
+              </div>
+              <div>
+                <label for="expense-amount">Valor (R$) *</label>
+                <input id="expense-amount" type="number" min="0.01" step="0.01" required>
+              </div>
+              <div>
+                <label for="expense-category">Categoria</label>
+                <select id="expense-category">
+                  <option value="Geral">Geral</option>
+                  <option value="Transporte">Transporte</option>
+                  <option value="Material">Material</option>
+                  <option value="Taxas">Taxas</option>
+                  <option value="Outros">Outros</option>
+                </select>
+              </div>
+              <div>
+                <label for="expense-date">Data *</label>
+                <input id="expense-date" type="date" required>
+              </div>
+              <div class="form-actions">
+                <button type="submit">Salvar despesa</button>
+              </div>
             </form>
           </div>
-          <div class="content-card"><h3>Despesas registradas</h3><div id="expenses-list" class="table-wrap"></div></div>
+
+          <div class="content-card">
+            <h3>Despesas registradas</h3>
+            <div id="expenses-list" class="table-wrap"></div>
+          </div>
         </section>
 
         <section id="page-history" class="page">
-          <div class="page-heading"><div><p class="eyebrow">MOVIMENTAÇÕES</p><h2>Histórico</h2><p>Consulte os registros da sua conta.</p></div></div>
-          <div class="content-card"><div class="section-heading"><h3>Histórico geral</h3><button type="button" id="export-data" class="button-outline">Exportar backup</button></div><div id="history-list" class="table-wrap"></div></div>
-        </section>
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">REGISTROS</p>
+              <h2>Histórico</h2>
+              <p>Acompanhe as operações realizadas no sistema.</p>
+            </div>
+          </div>
 
-        <footer class="app-footer">CrediFácil · Controle financeiro</footer>
+          <div class="content-card">
+            <div class="section-heading">
+              <h3>Atividades</h3>
+              <button type="button" id="export-data" class="button-outline">Exportar backup</button>
+            </div>
+            <div id="history-list" class="table-wrap"></div>
+          </div>
+        </section>
       </main>
     </div>
   </div>
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <div id="toast" class="toast" role="status"></div>
 </body>
 </html>
