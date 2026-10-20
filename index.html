@@ -1,166 +1,112 @@
 
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#100d20">
-  <title>Desafio Otaku</title>
+  <meta name="theme-color" content="#090817">
+  <title>Desafío Otaku | Anime Quiz</title>
   <link rel="stylesheet" href="style.css">
   <script src="main.js" defer></script>
 </head>
 <body>
   <header class="topbar">
-    <a class="logo" href="#" aria-label="Desafio Otaku">
-      <span class="logo-icon">卍</span>
-      <span>DESAFIO <strong>OTAKU</strong></span>
-    </a>
-    <span class="version">ANIME QUIZ</span>
+    <a class="brand" href="#">🎌 DESAFÍO <span>OTAKU</span></a>
+    <span class="pill">⚡ ANIME QUIZ</span>
   </header>
 
   <main class="container">
-    <section id="homeScreen" class="screen">
-      <div class="hero">
-        <div class="hero-tag">⚡ O teste definitivo dos animes</div>
-        <h1>Você é um<br><span>verdadeiro Otaku?</span></h1>
-        <p class="subtitle">
-          Escolha seus animes favoritos, selecione um desafio
-          e prove que você conhece esse universo!
-        </p>
+    <section class="hero">
+      <p class="eyebrow">✦ EL RETO DEFINITIVO ✦</p>
+      <h1>¿Eres un verdadero<br><span>Otaku?</span></h1>
+      <p>Elige tus animes favoritos y demuestra cuánto sabes de este universo.</p>
+      <div class="stats">
+        <div><strong id="anime-total">48</strong><small>ANIMES</small></div>
+        <div><strong>3</strong><small>DESAFÍOS</small></div>
+        <div><strong>∞</strong><small>DIVERSIÓN</small></div>
       </div>
-
-      <section class="selection-panel">
-        <div class="section-heading">
-          <div>
-            <h2>🎌 Escolha seus animes</h2>
-            <p>O quiz usará perguntas somente dos animes selecionados.</p>
-          </div>
-          <span id="selectedCount" class="selection-count">0 selecionados</span>
-        </div>
-
-        <div class="filters">
-          <input id="animeSearch" type="search"
-            placeholder="🔎 Pesquisar anime..."
-            aria-label="Pesquisar anime">
-
-          <select id="categoryFilter" aria-label="Filtrar por categoria">
-            <option value="all">Todos os gêneros</option>
-          </select>
-        </div>
-
-        <div class="selection-actions">
-          <button id="selectAllButton" class="small-button">☑ Selecionar todos</button>
-          <button id="clearButton" class="small-button">Limpar seleção</button>
-        </div>
-
-        <div id="animeGrid" class="anime-grid"></div>
-
-        <div class="selection-bottom">
-          <span id="questionAvailability">Selecione seus animes para começar.</span>
-          <button id="showAllButton" class="small-button">Ver todos</button>
-        </div>
-      </section>
-
-      <section class="modes-section">
-        <div class="section-heading">
-          <div>
-            <h2>🏆 Escolha seu desafio</h2>
-            <p>As perguntas não se repetem na mesma rodada.</p>
-          </div>
-        </div>
-
-        <div class="mode-grid">
-          <button class="mode-card beginner" data-mode="5">
-            <span class="mode-icon">🎯</span>
-            <span class="mode-label">MODO 01</span>
-            <h3>Aprendiz</h3>
-            <p>Um aquecimento de respeito.</p>
-            <span class="mode-count">5 PERGUNTAS</span>
-            <span class="mode-arrow">COMEÇAR →</span>
-          </button>
-
-          <button class="mode-card otaku" data-mode="10">
-            <span class="mode-icon">🔥</span>
-            <span class="mode-label">MODO 02</span>
-            <h3>Otaku</h3>
-            <p>Mostre o que você sabe.</p>
-            <span class="mode-count">10 PERGUNTAS</span>
-            <span class="mode-arrow">COMEÇAR →</span>
-          </button>
-
-          <button class="mode-card legend" data-mode="30">
-            <span class="mode-icon">👑</span>
-            <span class="mode-label">MODO 03</span>
-            <h3>Lenda Otaku</h3>
-            <p>Um desafio para os brabos.</p>
-            <span class="mode-count">30 PERGUNTAS</span>
-            <span class="mode-arrow">COMEÇAR →</span>
-          </button>
-        </div>
-      </section>
     </section>
 
-    <section id="quizScreen" class="screen hidden">
-      <div class="quiz-top">
-        <button id="quitButton" class="back-button">← Sair</button>
+    <section class="panel" id="setup">
+      <h2>🎌 Elige tus animes</h2>
+      <p class="muted">El quiz utilizará preguntas de los animes seleccionados.</p>
+
+      <div class="toolbar">
+        <input id="anime-search" type="search" placeholder="🔎 Buscar anime...">
+        <select id="genre-filter">
+          <option value="all">Todos los géneros</option>
+        </select>
+      </div>
+
+      <div class="selection-tools">
+        <strong id="selected-count">0 seleccionados</strong>
         <div>
-          <div id="quizModeLabel" class="quiz-mode-label">MODO OTAKU</div>
-          <div id="quizAnimeLabel" class="quiz-anime-label"></div>
+          <button id="select-all" class="btn secondary" type="button">Seleccionar visibles</button>
+          <button id="clear-selection" class="btn secondary" type="button">Limpiar</button>
         </div>
-        <div id="questionCounter" class="question-counter">1 / 10</div>
       </div>
 
-      <div class="progress-track">
-        <div id="progressBar" class="progress-bar"></div>
-      </div>
-
-      <div class="quiz-card">
-        <div class="question-meta">
-          <span id="animeBadge" class="anime-badge">ANIME</span>
-          <span id="difficultyBadge" class="difficulty-badge">FÁCIL</span>
-        </div>
-
-        <h2 id="questionText">Carregando pergunta...</h2>
-        <div id="answers" class="answers"></div>
-
-        <div id="feedback" class="feedback hidden" role="status" aria-live="polite"></div>
-        <button id="nextButton" class="primary-button hidden">Próxima pergunta →</button>
-      </div>
-
-      <div class="quiz-footer">
-        <span>✅ Acertos: <b id="correctCount">0</b></span>
-        <span>❌ Erros: <b id="wrongCount">0</b></span>
-      </div>
+      <div id="anime-grid" class="anime-grid"></div>
+      <p id="selection-hint" class="muted">Selecciona tus animes para comenzar.</p>
     </section>
 
-    <section id="resultScreen" class="screen hidden">
-      <div id="resultIcon" class="result-icon">🏆</div>
-      <div class="hero-tag">RESULTADO DO DESAFIO</div>
-      <h1 id="resultTitle">Mandou bem!</h1>
-      <p id="resultMessage" class="subtitle"></p>
+    <section class="panel" id="mode-section">
+      <h2>🏆 Elige tu desafío</h2>
+      <p class="muted">Las preguntas no se repiten durante una ronda.</p>
 
-      <div class="result-card">
-        <div class="score-circle">
-          <strong id="scorePercent">100%</strong>
-          <span>ACERTOS</span>
-        </div>
-        <div class="result-stats">
-          <div><span>Respostas certas</span><b id="resultCorrect">0</b></div>
-          <div><span>Respostas erradas</span><b id="resultWrong">0</b></div>
-          <div><span>Modo escolhido</span><b id="resultMode">Otaku</b></div>
-          <div><span>Animes utilizados</span><b id="resultAnimeCount">0</b></div>
-        </div>
+      <div class="mode-grid">
+        <button class="mode-card" data-count="5" type="button">
+          <span>🎯 MODO 01</span>
+          <h3>Aprendiz</h3>
+          <p>Un calentamiento para empezar.</p>
+          <strong>5 PREGUNTAS →</strong>
+        </button>
+        <button class="mode-card" data-count="10" type="button">
+          <span>🔥 MODO 02</span>
+          <h3>Otaku</h3>
+          <p>Demuestra lo que sabes.</p>
+          <strong>10 PREGUNTAS →</strong>
+        </button>
+        <button class="mode-card" data-count="30" type="button">
+          <span>👑 MODO 03</span>
+          <h3>Otaku legendario</h3>
+          <p>Un reto para los más fuertes.</p>
+          <strong>30 PREGUNTAS →</strong>
+        </button>
       </div>
+      <p id="mode-hint" class="muted">Selecciona animes para activar los desafíos.</p>
+    </section>
 
-      <div id="rankMessage" class="rank-message"></div>
+    <section class="panel hidden" id="quiz">
+      <div class="quiz-header">
+        <button id="exit-quiz" class="btn secondary" type="button">← Salir</button>
+        <span id="quiz-mode" class="pill">MODO OTAKU</span>
+      </div>
+      <div class="progress-info">
+        <span id="question-counter">PREGUNTA 1 / 5</span>
+        <span id="score-label">⭐ 0 puntos</span>
+      </div>
+      <div class="progress"><div id="progress-fill"></div></div>
+      <p id="question-category" class="eyebrow">ANIME QUIZ</p>
+      <h2 id="question-text">Preparando pregunta...</h2>
+      <div id="answer-options" class="answer-options"></div>
+      <p id="answer-feedback" aria-live="polite"></p>
+      <button id="next-question" class="btn primary hidden" type="button">Siguiente pregunta →</button>
+    </section>
 
+    <section class="panel results hidden" id="results">
+      <div id="result-icon" class="result-icon">🏆</div>
+      <p class="eyebrow">FIN DEL DESAFÍO</p>
+      <h2 id="result-title">¡Buen trabajo!</h2>
+      <p id="result-message"></p>
+      <strong id="final-score" class="final-score">0/5</strong>
+      <p id="final-percent" class="muted"></p>
       <div class="result-actions">
-        <button id="retryButton" class="primary-button">🔄 Jogar novamente</button>
-        <button id="homeButton" class="secondary-button">🎌 Voltar à seleção</button>
+        <button id="retry-quiz" class="btn primary" type="button">Volver a jugar</button>
+        <button id="back-home" class="btn secondary" type="button">Cambiar animes</button>
       </div>
     </section>
+    <footer>DESAFÍO OTAKU <span>◆</span> Hecho para fans del anime</footer>
   </main>
-
-  <footer class="footer">DESAFIO OTAKU · Feito para fãs de anime 🎌</footer>
 </body>
 </html>
