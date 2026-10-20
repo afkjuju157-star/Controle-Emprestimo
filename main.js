@@ -1,1314 +1,825 @@
+
 "use strict";
+
+/* ==========================================
+   DESAFIO OTAKU — seleção de animes e quiz
+   ========================================== */
 
 const $ = (id) => document.getElementById(id);
 
-const KEYS = {
-  users: "credifacil_users_v2",
-  session: "credifacil_session_v2",
-  customers: "credifacil_customers_v2",
-  loans: "credifacil_loans_v2",
-  payments: "credifacil_payments_v2",
-  expenses: "credifacil_expenses_v2",
-  history: "credifacil_history_v2"
-};
-
-let toastTimer;
-let editingPaymentId = null;
-let editingCustomerId = null;
-
-function read(key, fallback = []) {
-  try {
-    const value = JSON.parse(localStorage.getItem(key));
-    return value ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function write(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
-}
-
-function id() {
-  return crypto.randomUUID
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function currentSession() {
-  return read(KEYS.session, null);
-}
-
-function userKey(base) {
-  const session = currentSession();
-  return `${base}_${session?.userId || "guest"}`;
-}
-
-function myRows(base) {
-  return read(userKey(base), []);
-}
-
-function saveRows(base, rows) {
-  write(userKey(base), rows);
-}
-
-function money(value) {
-  return Number(value || 0).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL"
-  });
-}
-
-function today() {
-  const date = new Date();
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function formatDate(value) {
-  if (!value) return "—";
-  const parts = String(value).slice(0, 10).split("-");
-  return parts.length === 3
-    ? `${parts[2]}/${parts[1]}/${parts[0]}`
-    : value;
-}
-
-function number(value) {
-  return Number.isFinite(Number(value)) ? Number(value) : 0;
-}
-
-function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
-  })[char]);
-}
-
-function notify(message, type = "success") {
-  const element = $("toast");
-
-  if (!element) {
-    alert(message);
-    return;
-  }
-
-  element.textContent = message;
-  element.className = `toast show ${type}`;
-
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => {
-    element.className = "toast";
-  }, 3200);
-}
-
-function setMessage(id, message, type = "") {
-  const element = $(id);
-  if (!element) return;
-
-  element.textContent = message;
-  element.className = `message ${type}`;
-}
-
-function showScreen(screen) {
-  ["login-screen", "register-screen", "app-shell"].forEach((id) => {
-    $(id)?.classList.add("hidden");
-  });
-
-  $(screen)?.classList.remove("hidden");
-}
-
-function recordHistory(type, description, amount = 0) {
-  const history = myRows(KEYS.history);
-
-  history.unshift({
-    id: id(),
-    type,
-    description,
-    amount: number(amount),
-    date: new Date().toISOString()
-  });
-
-  saveRows(KEYS.history, history.slice(0, 1000));
-}
-
-function getCustomer(customerId) {
-  return myRows(KEYS.customers).find((item) => item.id === customerId);
-}
-
-function getLoan(loanId) {
-  return myRows(KEYS.loans).find((item) => item.id === loanId);
-}
-
-function loanPaid(loanId, excludingPaymentId = null) {
-  return myRows(KEYS.payments)
-    .filter((payment) =>
-      payment.loanId === loanId &&
-      payment.id !== excludingPaymentId
-    )
-    .reduce((sum, payment) => sum + number(payment.amount), 0);
-}
-
-function loanTotal(loan) {
-  return number(loan.amount) * (1 + number(loan.interest) / 100);
-}
-
-function loanBalance(loan, excludingPaymentId = null) {
-  return Math.max(
-    0,
-    loanTotal(loan) - loanPaid(loan.id, excludingPaymentId)
-  );
-}
-
-/* Calcula o valor de cada parcela a partir do total com juros. */
-function installmentValue(loan) {
-  if (!loan) return 0;
-
-  const installments = Math.max(
-    1,
-    Math.floor(number(loan.installments))
-  );
-
-  return Math.round((loanTotal(loan) / installments) * 100) / 100;
-}
-
-function nextInstallmentNumber(loan) {
-  if (!loan) return 1;
-
-  const value = installmentValue(loan);
-  if (value <= 0) return 1;
-
-  const paid = loanPaid(loan.id);
-
-  return Math.min(
-    Math.max(1, Math.floor(number(loan.installments))),
-    Math.floor((paid + 0.001) / value) + 1
-  );
-}
-
-/* Atualiza o valor da parcela ao selecionar um empréstimo. */
-function updatePaymentSuggestion() {
-  const loan = getLoan($("payment-loan")?.value);
-  const installmentField = $("payment-installment-value");
-  const amountField = $("payment-amount");
-
-  if (!installmentField || !amountField) return;
-
-  if (!loan) {
-    installmentField.value = "";
-    amountField.value = "";
-    return;
-  }
-
-  const value = installmentValue(loan);
-  const balance = loanBalance(loan);
-
-  installmentField.value = money(value);
-  amountField.value = Math.min(value, balance).toFixed(2);
-}
-
-function renderDashboard() {
-  const customers = myRows(KEYS.customers);
-  const loans = myRows(KEYS.loans);
-  const payments = myRows(KEYS.payments);
-  const expenses = myRows(KEYS.expenses);
-
-  const totalLent = loans.reduce(
-    (sum, loan) => sum + number(loan.amount), 0
-  );
-
-  const totalReceived = payments.reduce(
-    (sum, payment) => sum + number(payment.amount), 0
-  );
-
-  const totalExpenses = expenses.reduce(
-    (sum, expense) => sum + number(expense.amount), 0
-  );
-
-  const receivedToday = payments
-    .filter((payment) => payment.date === today())
-    .reduce((sum, payment) => sum + number(payment.amount), 0);
-
-  const open = loans.reduce(
-    (sum, loan) => sum + loanBalance(loan), 0
-  );
-
-  $("total-customers").textContent = String(customers.length);
-  $("total-loans").textContent = String(loans.length);
-  $("total-lent").textContent = money(totalLent);
-  $("total-received").textContent = money(totalReceived);
-  $("total-open").textContent = money(open);
-  $("total-expenses").textContent = money(totalExpenses);
-  $("financial-result").textContent = money(totalReceived - totalExpenses);
-  $("received-today").textContent = money(receivedToday);
-
-  const recent = [...payments]
-    .sort((a, b) =>
-      `${b.date}${b.createdAt || ""}`.localeCompare(
-        `${a.date}${a.createdAt || ""}`
-      )
-    )
-    .slice(0, 8);
-
-  $("dashboard-payments").innerHTML = recent.length ? `
-    <table>
-      <thead>
-        <tr><th>Cliente</th><th>Data</th><th>Valor</th></tr>
-      </thead>
-      <tbody>
-        ${recent.map((payment) => {
-          const loan = getLoan(payment.loanId);
-          const customer =
-            getCustomer(payment.customerId) ||
-            getCustomer(loan?.customerId);
-
-          return `
-            <tr>
-              <td>${escapeHtml(customer?.name || "Cliente não encontrado")}</td>
-              <td>${formatDate(payment.date)}</td>
-              <td>${money(payment.amount)}</td>
-            </tr>
-          `;
-        }).join("")}
-      </tbody>
-    </table>
-  ` : '<div class="empty-state">Nenhum pagamento registrado ainda.</div>';
-}
-
-function renderCustomers() {
-  const search = ($("customer-search").value || "").trim().toLowerCase();
-
-  const customers = myRows(KEYS.customers).filter((customer) =>
-    `${customer.name} ${customer.phone || ""} ${customer.document || ""}`
-      .toLowerCase()
-      .includes(search)
-  );
-
-  $("customers-list").innerHTML = customers.length ? `
-    <table>
-      <thead>
-        <tr>
-          <th>Nome</th>
-          <th>Telefone</th>
-          <th>CPF</th>
-          <th>Endereço</th>
-          <th>Ações</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${customers.map((customer) => `
-          <tr>
-            <td>${escapeHtml(customer.name)}</td>
-            <td>${escapeHtml(customer.phone || "—")}</td>
-            <td>${escapeHtml(customer.document || "—")}</td>
-            <td>${escapeHtml(customer.address || "—")}</td>
-            <td>
-              <button type="button"
-                data-action="edit-customer"
-                data-id="${escapeHtml(customer.id)}">Editar</button>
-
-              <button type="button"
-                data-action="delete-customer"
-                data-id="${escapeHtml(customer.id)}">Excluir</button>
-            </td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-  ` : '<div class="empty-state">Nenhum cliente encontrado.</div>';
-
-  renderCustomerOptions();
-}
-
-function renderCustomerOptions() {
-  const customers = myRows(KEYS.customers);
-  const select = $("loan-customer");
-  const selected = select.value;
-
-  select.innerHTML =
-    '<option value="">Selecione um cliente</option>' +
-    customers.map((customer) => `
-      <option value="${escapeHtml(customer.id)}">
-        ${escapeHtml(customer.name)}
-      </option>
-    `).join("");
-
-  if (customers.some((customer) => customer.id === selected)) {
-    select.value = selected;
-  }
-}
-
-function renderLoans() {
-  const search = ($("loan-search").value || "").trim().toLowerCase();
-
-  const loans = myRows(KEYS.loans).filter((loan) => {
-    const customer = getCustomer(loan.customerId);
-    return `${customer?.name || ""} ${loan.id}`
-      .toLowerCase()
-      .includes(search);
-  });
-
-  $("loans-list").innerHTML = loans.length ? `
-    <table>
-      <thead>
-        <tr>
-          <th>Cliente</th>
-          <th>Valor</th>
-          <th>Total com juros</th>
-          <th>Parcelas</th>
-          <th>Valor da parcela</th>
-          <th>Recebido</th>
-          <th>Saldo</th>
-          <th>Ações</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${loans.map((loan) => `
-          <tr>
-            <td>${escapeHtml(getCustomer(loan.customerId)?.name || "Cliente removido")}</td>
-            <td>${money(loan.amount)}</td>
-            <td>${money(loanTotal(loan))}</td>
-            <td>${escapeHtml(loan.installments)}</td>
-            <td>${money(installmentValue(loan))}</td>
-            <td>${money(loanPaid(loan.id))}</td>
-            <td>${money(loanBalance(loan))}</td>
-            <td>
-              <button type="button"
-                data-action="delete-loan"
-                data-id="${escapeHtml(loan.id)}">Excluir</button>
-            </td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-  ` : '<div class="empty-state">Nenhum empréstimo encontrado.</div>';
-
-  renderLoanOptions();
-}
-
-function renderLoanOptions() {
-  const select = $("payment-loan");
-  const selected = select.value;
-
-  const loans = myRows(KEYS.loans).filter(
-    (loan) => loanBalance(loan) > 0
-  );
-
-  select.innerHTML =
-    '<option value="">Selecione um empréstimo</option>' +
-    loans.map((loan) => {
-      const name = getCustomer(loan.customerId)?.name || "Cliente removido";
-
-      return `
-        <option value="${escapeHtml(loan.id)}">
-          ${escapeHtml(name)} — parcela ${money(installmentValue(loan))}
-          — saldo ${money(loanBalance(loan))}
-        </option>
-      `;
-    }).join("");
-
-  if (loans.some((loan) => loan.id === selected)) {
-    select.value = selected;
-  }
-}
-
-function renderPayments() {
-  const payments = [...myRows(KEYS.payments)]
-    .sort((a, b) => b.date.localeCompare(a.date));
-
-  $("payments-list").innerHTML = payments.length ? `
-    <table>
-      <thead>
-        <tr>
-          <th>Cliente</th>
-          <th>Data</th>
-          <th>Valor</th>
-          <th>Observação</th>
-          <th>Ações</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${payments.map((payment) => {
-          const loan = getLoan(payment.loanId);
-          const customer =
-            getCustomer(payment.customerId) ||
-            getCustomer(loan?.customerId);
-
-          return `
-            <tr>
-              <td>${escapeHtml(customer?.name || "Cliente removido")}</td>
-              <td>${formatDate(payment.date)}</td>
-              <td>${money(payment.amount)}</td>
-              <td>${escapeHtml(payment.notes || "—")}</td>
-              <td>
-                <button type="button"
-                  data-action="view-receipt"
-                  data-id="${escapeHtml(payment.id)}">Comprovante</button>
-
-                <button type="button"
-                  data-action="edit-payment"
-                  data-id="${escapeHtml(payment.id)}">Editar</button>
-
-                <button type="button"
-                  data-action="delete-payment"
-                  data-id="${escapeHtml(payment.id)}">Excluir</button>
-              </td>
-            </tr>
-          `;
-        }).join("")}
-      </tbody>
-    </table>
-  ` : '<div class="empty-state">Nenhum pagamento registrado.</div>';
-}
-
-function renderExpenses() {
-  const expenses = [...myRows(KEYS.expenses)]
-    .sort((a, b) => b.date.localeCompare(a.date));
-
-  $("expenses-list").innerHTML = expenses.length ? `
-    <table>
-      <thead>
-        <tr>
-          <th>Descrição</th>
-          <th>Categoria</th>
-          <th>Data</th>
-          <th>Valor</th>
-          <th>Ações</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${expenses.map((expense) => `
-          <tr>
-            <td>${escapeHtml(expense.description)}</td>
-            <td>${escapeHtml(expense.category)}</td>
-            <td>${formatDate(expense.date)}</td>
-            <td>${money(expense.amount)}</td>
-            <td>
-              <button type="button"
-                data-action="delete-expense"
-                data-id="${escapeHtml(expense.id)}">Excluir</button>
-            </td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-  ` : '<div class="empty-state">Nenhuma despesa registrada.</div>';
-}
-
-function renderHistory() {
-  const history = myRows(KEYS.history);
-
-  $("history-list").innerHTML = history.length ? `
-    <table>
-      <thead>
-        <tr>
-          <th>Data e hora</th>
-          <th>Movimentação</th>
-          <th>Descrição</th>
-          <th>Valor</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${history.map((item) => `
-          <tr>
-            <td>${new Date(item.date).toLocaleString("pt-BR")}</td>
-            <td>${escapeHtml(item.type)}</td>
-            <td>${escapeHtml(item.description)}</td>
-            <td>${money(item.amount)}</td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-  ` : '<div class="empty-state">Nenhuma movimentação registrada.</div>';
-}
-
-function renderAll() {
-  renderDashboard();
-  renderCustomers();
-  renderLoans();
-  renderPayments();
-  renderExpenses();
-  renderHistory();
-}
-
-function resetCustomerForm() {
-  $("customer-form").reset();
-  $("customer-id").value = "";
-  editingCustomerId = null;
-  $("customer-form-title").textContent = "Novo cliente";
-  $("customer-cancel").textContent = "Limpar";
-}
-
-function saveCustomer(event) {
-  event.preventDefault();
-
-  const customers = myRows(KEYS.customers);
-
-  const customer = {
-    id: editingCustomerId || id(),
-    name: $("customer-name").value.trim(),
-    phone: $("customer-phone").value.trim(),
-    document: $("customer-document").value.trim(),
-    address: $("customer-address").value.trim(),
-    updatedAt: new Date().toISOString()
-  };
-
-  if (!customer.name) {
-    return notify("Informe o nome do cliente.", "error");
-  }
-
-  if (editingCustomerId) {
-    const index = customers.findIndex(
-      (item) => item.id === editingCustomerId
-    );
-
-    if (index < 0) {
-      return notify("Cliente não encontrado.", "error");
-    }
-
-    customers[index] = { ...customers[index], ...customer };
-    recordHistory("Cliente atualizado", customer.name);
-  } else {
-    customer.createdAt = new Date().toISOString();
-    customers.push(customer);
-    recordHistory("Cliente cadastrado", customer.name);
-  }
-
-  saveRows(KEYS.customers, customers);
-  resetCustomerForm();
-  renderAll();
-  notify("Cliente salvo com sucesso.");
-}
-
-function editCustomer(customerId) {
-  const customer = getCustomer(customerId);
-
-  if (!customer) {
-    return notify("Cliente não encontrado.", "error");
-  }
-
-  editingCustomerId = customer.id;
-  $("customer-id").value = customer.id;
-  $("customer-name").value = customer.name || "";
-  $("customer-phone").value = customer.phone || "";
-  $("customer-document").value = customer.document || "";
-  $("customer-address").value = customer.address || "";
-  $("customer-form-title").textContent = "Editar cliente";
-  $("customer-cancel").textContent = "Cancelar edição";
-
-  $("customer-form").scrollIntoView({
-    behavior: "smooth",
-    block: "start"
-  });
-}
-
-function deleteCustomer(customerId) {
-  const customer = getCustomer(customerId);
-  if (!customer) return;
-
-  const hasLoan = myRows(KEYS.loans).some(
-    (loan) => loan.customerId === customerId
-  );
-
-  if (hasLoan) {
-    return notify(
-      "Este cliente tem empréstimos. Exclua ou resolva os empréstimos primeiro.",
-      "error"
-    );
-  }
-
-  if (!confirm(`Excluir o cliente ${customer.name}?`)) return;
-
-  saveRows(
-    KEYS.customers,
-    myRows(KEYS.customers).filter((item) => item.id !== customerId)
-  );
-
-  recordHistory("Cliente excluído", customer.name);
-  renderAll();
-  notify("Cliente excluído.");
-}
-
-function saveLoan(event) {
-  event.preventDefault();
-
-  const customerId = $("loan-customer").value;
-  const amount = number($("loan-amount").value);
-  const interest = number($("loan-interest").value);
-  const installments = Math.floor(number($("loan-installments").value));
-  const date = $("loan-start-date").value;
-
-  if (!getCustomer(customerId)) {
-    return notify("Selecione um cliente válido.", "error");
-  }
-
-  if (amount <= 0 || installments < 1 || interest < 0 || !date) {
-    return notify("Confira os dados do empréstimo.", "error");
-  }
-
-  const loan = {
-    id: id(),
-    customerId,
-    amount,
-    interest,
-    installments,
-    frequency: $("loan-frequency").value,
-    date,
-    createdAt: new Date().toISOString()
-  };
-
-  const loans = myRows(KEYS.loans);
-  loans.push(loan);
-  saveRows(KEYS.loans, loans);
-
-  recordHistory(
-    "Empréstimo cadastrado",
-    getCustomer(customerId).name,
-    amount
-  );
-
-  $("loan-form").reset();
-  $("loan-start-date").value = today();
-  $("loan-interest").value = "0";
-  $("loan-installments").value = "1";
-
-  renderAll();
-  notify("Empréstimo cadastrado.");
-}
-
-function savePayment(event) {
-  event.preventDefault();
-
-  const loanId = $("payment-loan").value;
-  const loan = getLoan(loanId);
-  const amount = number($("payment-amount").value);
-  const date = $("payment-date").value;
-  const notes = $("payment-notes").value.trim();
-
-  if (!loan) {
-    return notify("Selecione um empréstimo válido.", "error");
-  }
-
-  if (amount <= 0 || !date) {
-    return notify("Informe o valor e a data.", "error");
-  }
-
-  const balanceBefore = loanBalance(loan);
-
-  if (amount > balanceBefore + 0.005) {
-    return notify(
-      `O valor supera o saldo restante de ${money(balanceBefore)}.`,
-      "error"
-    );
-  }
-
-  const payment = {
-    id: id(),
-    loanId,
-    customerId: loan.customerId,
-    amount,
-    date,
-    notes,
-    installmentValue: installmentValue(loan),
-    installmentNumber: nextInstallmentNumber(loan),
-    createdAt: new Date().toISOString()
-  };
-
-  const payments = myRows(KEYS.payments);
-  payments.push(payment);
-  saveRows(KEYS.payments, payments);
-
-  recordHistory(
-    "Pagamento recebido",
-    getCustomer(loan.customerId)?.name || "Cliente",
-    amount
-  );
-
-  $("payment-form").reset();
-  $("payment-date").value = today();
-
-  renderAll();
-  updatePaymentSuggestion();
-
-  notify("Pagamento registrado. Abrindo comprovante.");
-  showReceipt(payment.id);
-}
+const ANIMES = [
+  { name: "Fullmetal Alchemist", genres: ["Ação", "Fantasia"] },
+  { name: "Naruto", genres: ["Ação", "Aventura"] },
+  { name: "One Piece", genres: ["Ação", "Aventura"] },
+  { name: "Dragon Ball", genres: ["Ação", "Fantasia"] },
+  { name: "Demon Slayer", genres: ["Ação", "Fantasia", "Sobrenatural"] },
+  { name: "Jujutsu Kaisen", genres: ["Ação", "Sobrenatural"] },
+  { name: "Death Note", genres: ["Suspense", "Psicológico"] },
+  { name: "Attack on Titan", genres: ["Ação", "Suspense"] },
+  { name: "Spy x Family", genres: ["Comédia", "Ação"] },
+  { name: "Haikyuu!!", genres: ["Esportes"] },
+  { name: "Blue Lock", genres: ["Esportes"] },
+  { name: "Sword Art Online", genres: ["Ação", "Isekai", "Fantasia"] },
+  { name: "Frieren", genres: ["Fantasia", "Aventura"] },
+  { name: "Sailor Moon", genres: ["Fantasia", "Romance"] },
+  { name: "Sakura Card Captors", genres: ["Fantasia", "Aventura"] },
+  { name: "Pokémon", genres: ["Aventura", "Fantasia"] },
+  { name: "Chainsaw Man", genres: ["Ação", "Sobrenatural", "Terror"] },
+  { name: "My Hero Academia", genres: ["Ação", "Aventura"] },
+  { name: "Hunter x Hunter", genres: ["Ação", "Aventura"] },
+  { name: "Bleach", genres: ["Ação", "Sobrenatural"] },
+  { name: "Tokyo Ghoul", genres: ["Terror", "Suspense"] },
+  { name: "Kaguya-sama: Love Is War", genres: ["Romance", "Comédia"] },
+  { name: "Your Name", genres: ["Romance", "Fantasia"] },
+  { name: "Steins;Gate", genres: ["Ficção científica", "Suspense"] }
+];
 
 /*
-  Mantém a possibilidade de corrigir um pagamento lançado
-  no cliente ou empréstimo errado.
+  Cada pergunta possui:
+  anime, difficulty, question, options, answer e explanation.
+  answer é a posição correta: 0, 1, 2 ou 3.
 */
-function editPayment(paymentId) {
-  const payment = myRows(KEYS.payments).find(
-    (item) => item.id === paymentId
-  );
 
-  if (!payment) {
-    return notify("Pagamento não encontrado.", "error");
+const QUESTIONS = [
+  // FULLMETAL ALCHEMIST
+  {
+    anime: "Fullmetal Alchemist", difficulty: "Fácil",
+    question: "Quem é o irmão mais novo de Edward Elric?",
+    options: ["Roy Mustang", "Alphonse Elric", "Ling Yao", "Scar"],
+    answer: 1,
+    explanation: "Alphonse é o irmão mais novo de Edward."
+  },
+  {
+    anime: "Fullmetal Alchemist", difficulty: "Médio",
+    question: "Qual é o apelido de Edward?",
+    options: ["Alquimista de Aço", "Alquimista das Chamas", "Alquimista de Gelo", "Alquimista Carmesim"],
+    answer: 0,
+    explanation: "Edward é conhecido como o Alquimista de Aço."
+  },
+
+  // NARUTO
+  {
+    anime: "Naruto", difficulty: "Fácil",
+    question: "Qual é o sonho de Naruto?",
+    options: ["Ser Hokage", "Ser um samurai", "Ser pirata", "Ser médico"],
+    answer: 0,
+    explanation: "Naruto sonha em se tornar Hokage."
+  },
+  {
+    anime: "Naruto", difficulty: "Médio",
+    question: "Quem é o sensei do Time 7 no início da história?",
+    options: ["Jiraiya", "Asuma", "Kakashi", "Iruka"],
+    answer: 2,
+    explanation: "Kakashi Hatake lidera o Time 7."
+  },
+
+  // ONE PIECE
+  {
+    anime: "One Piece", difficulty: "Fácil",
+    question: "Qual é o sonho de Luffy?",
+    options: ["Ser Hokage", "Ser Rei dos Piratas", "Ser Almirante", "Ser rei de Wano"],
+    answer: 1,
+    explanation: "Luffy quer se tornar o Rei dos Piratas."
+  },
+  {
+    anime: "One Piece", difficulty: "Médio",
+    question: "Quem é o espadachim dos Chapéus de Palha?",
+    options: ["Sanji", "Usopp", "Franky", "Roronoa Zoro"],
+    answer: 3,
+    explanation: "Zoro é o espadachim da tripulação."
+  },
+
+  // DRAGON BALL
+  {
+    anime: "Dragon Ball", difficulty: "Fácil",
+    question: "Qual é o nome saiyajin de Goku?",
+    options: ["Vegeta", "Kakarotto", "Bardock", "Broly"],
+    answer: 1,
+    explanation: "Kakarotto é o nome saiyajin de Goku."
+  },
+  {
+    anime: "Dragon Ball", difficulty: "Fácil",
+    question: "Quantas Esferas do Dragão existem na busca clássica?",
+    options: ["Cinco", "Seis", "Sete", "Nove"],
+    answer: 2,
+    explanation: "A coleção clássica possui sete esferas."
+  },
+
+  // DEMON SLAYER
+  {
+    anime: "Demon Slayer", difficulty: "Fácil",
+    question: "Qual é o nome da irmã de Tanjiro?",
+    options: ["Shinobu", "Mitsuri", "Nezuko", "Kanao"],
+    answer: 2,
+    explanation: "Nezuko é a irmã de Tanjiro Kamado."
+  },
+  {
+    anime: "Demon Slayer", difficulty: "Médio",
+    question: "Quem é conhecido como o Hashira das Chamas?",
+    options: ["Giyu Tomioka", "Kyojuro Rengoku", "Muichiro Tokito", "Tengen Uzui"],
+    answer: 1,
+    explanation: "Kyojuro Rengoku é o Hashira das Chamas."
+  },
+
+  // JUJUTSU KAISEN
+  {
+    anime: "Jujutsu Kaisen", difficulty: "Fácil",
+    question: "Quem é o protagonista da série?",
+    options: ["Megumi Fushiguro", "Yuji Itadori", "Satoru Gojo", "Yuta Okkotsu"],
+    answer: 1,
+    explanation: "Yuji Itadori é o protagonista."
+  },
+  {
+    anime: "Jujutsu Kaisen", difficulty: "Médio",
+    question: "Qual entidade está ligada ao corpo de Yuji?",
+    options: ["Mahito", "Sukuna", "Jogo", "Hanami"],
+    answer: 1,
+    explanation: "Yuji se torna o receptáculo de Sukuna."
+  },
+
+  // DEATH NOTE
+  {
+    anime: "Death Note", difficulty: "Fácil",
+    question: "Quem encontra o Death Note?",
+    options: ["L Lawliet", "Light Yagami", "Near", "Mello"],
+    answer: 1,
+    explanation: "Light Yagami encontra o caderno."
+  },
+  {
+    anime: "Death Note", difficulty: "Fácil",
+    question: "Qual shinigami está ligado ao caderno de Light?",
+    options: ["Rem", "Ryuk", "Gelus", "Sidoh"],
+    answer: 1,
+    explanation: "Ryuk é o shinigami associado ao caderno."
+  },
+
+  // ATTACK ON TITAN
+  {
+    anime: "Attack on Titan", difficulty: "Fácil",
+    question: "Quem é o protagonista no começo da história?",
+    options: ["Levi Ackerman", "Eren Yeager", "Armin Arlert", "Jean Kirstein"],
+    answer: 1,
+    explanation: "Eren Yeager é o protagonista."
+  },
+  {
+    anime: "Attack on Titan", difficulty: "Médio",
+    question: "Qual corpo militar realiza expedições além das muralhas?",
+    options: ["Polícia Militar", "Guarnição", "Tropa de Exploração", "Guarda Real"],
+    answer: 2,
+    explanation: "A Tropa de Exploração investiga o exterior."
+  },
+
+  // SPY X FAMILY
+  {
+    anime: "Spy x Family", difficulty: "Fácil",
+    question: "Qual é o nome da filha adotiva de Loid e Yor?",
+    options: ["Anya", "Nobara", "Nezuko", "Chika"],
+    answer: 0,
+    explanation: "Anya Forger faz parte da família Forger."
+  },
+  {
+    anime: "Spy x Family", difficulty: "Médio",
+    question: "Qual é a profissão secreta de Yor?",
+    options: ["Espiã", "Assassina", "Detetive", "Médica"],
+    answer: 1,
+    explanation: "Yor trabalha secretamente como assassina."
+  },
+
+  // HAIKYUU!!
+  {
+    anime: "Haikyuu!!", difficulty: "Fácil",
+    question: "Qual esporte é o foco da série?",
+    options: ["Basquete", "Futebol", "Vôlei", "Tênis"],
+    answer: 2,
+    explanation: "Haikyuu!! acompanha jogadores de voleibol."
+  },
+  {
+    anime: "Haikyuu!!", difficulty: "Fácil",
+    question: "Qual é o primeiro nome do protagonista Hinata?",
+    options: ["Shoyo", "Tobio", "Kei", "Tadashi"],
+    answer: 0,
+    explanation: "O protagonista é Shoyo Hinata."
+  },
+
+  // BLUE LOCK
+  {
+    anime: "Blue Lock", difficulty: "Fácil",
+    question: "Qual esporte é o foco de Blue Lock?",
+    options: ["Vôlei", "Futebol", "Basquete", "Beisebol"],
+    answer: 1,
+    explanation: "Blue Lock é sobre futebol."
+  },
+  {
+    anime: "Blue Lock", difficulty: "Médio",
+    question: "Quem é o protagonista de Blue Lock?",
+    options: ["Rin Itoshi", "Meguru Bachira", "Yoichi Isagi", "Seishiro Nagi"],
+    answer: 2,
+    explanation: "Yoichi Isagi é o protagonista."
+  },
+
+  // SWORD ART ONLINE
+  {
+    anime: "Sword Art Online", difficulty: "Fácil",
+    question: "Qual é o apelido mais conhecido de Kirito?",
+    options: ["Espadachim Negro", "Alquimista de Aço", "Rei Demônio", "Ninja Branco"],
+    answer: 0,
+    explanation: "Kirito é conhecido como Espadachim Negro."
+  },
+  {
+    anime: "Sword Art Online", difficulty: "Médio",
+    question: "Qual é o nome da parceira mais conhecida de Kirito?",
+    options: ["Sinon", "Asuna", "Alice", "Silica"],
+    answer: 1,
+    explanation: "Asuna é uma das principais personagens e parceira de Kirito."
+  },
+
+  // FRIEREN
+  {
+    anime: "Frieren", difficulty: "Fácil",
+    question: "Qual é a espécie de Frieren?",
+    options: ["Humana", "Elfa", "Demônio", "Anã"],
+    answer: 1,
+    explanation: "Frieren é uma elfa com vida extremamente longa."
+  },
+  {
+    anime: "Frieren", difficulty: "Médio",
+    question: "Qual é o nome da aprendiz humana de Frieren?",
+    options: ["Fern", "Stark", "Aura", "Flamme"],
+    answer: 0,
+    explanation: "Fern é aprendiz de Frieren."
+  },
+
+  // SAILOR MOON
+  {
+    anime: "Sailor Moon", difficulty: "Fácil",
+    question: "Qual é o nome civil da Sailor Moon?",
+    options: ["Rei Hino", "Ami Mizuno", "Usagi Tsukino", "Makoto Kino"],
+    answer: 2,
+    explanation: "A protagonista é Usagi Tsukino."
+  },
+  {
+    anime: "Sailor Moon", difficulty: "Médio",
+    question: "Qual é o nome do gato preto que acompanha Usagi?",
+    options: ["Artemis", "Luna", "Diana", "Chibi"],
+    answer: 1,
+    explanation: "Luna é a gata preta que orienta Usagi."
+  },
+
+  // SAKURA CARD CAPTORS
+  {
+    anime: "Sakura Card Captors", difficulty: "Fácil",
+    question: "Qual é o nome da protagonista?",
+    options: ["Sakura Kinomoto", "Tomoyo Daidouji", "Meiling Li", "Nakuru Akizuki"],
+    answer: 0,
+    explanation: "Sakura Kinomoto é a protagonista."
+  },
+  {
+    anime: "Sakura Card Captors", difficulty: "Médio",
+    question: "Qual criatura guardiã aparece como um pequeno leão alado?",
+    options: ["Yue", "Kero", "Suppi", "Spinel Sun"],
+    answer: 1,
+    explanation: "Kero, ou Kerberos, é o guardião das cartas Clow."
+  },
+
+  // POKÉMON
+  {
+    anime: "Pokémon", difficulty: "Fácil",
+    question: "Qual Pokémon é o companheiro mais famoso de Ash?",
+    options: ["Charmander", "Pikachu", "Eevee", "Mewtwo"],
+    answer: 1,
+    explanation: "Pikachu é o parceiro mais conhecido de Ash."
+  },
+  {
+    anime: "Pokémon", difficulty: "Fácil",
+    question: "Qual tipo de Pokémon é Pikachu?",
+    options: ["Fogo", "Água", "Elétrico", "Planta"],
+    answer: 2,
+    explanation: "Pikachu é do tipo Elétrico."
+  },
+
+  // CHAINSAW MAN
+  {
+    anime: "Chainsaw Man", difficulty: "Fácil",
+    question: "Qual é o nome do protagonista?",
+    options: ["Aki Hayakawa", "Denji", "Kishibe", "Yoshida"],
+    answer: 1,
+    explanation: "Denji é o protagonista de Chainsaw Man."
+  },
+  {
+    anime: "Chainsaw Man", difficulty: "Médio",
+    question: "Qual é o nome do demônio que se torna companheiro de Denji?",
+    options: ["Power", "Pochita", "Beam", "Angel"],
+    answer: 1,
+    explanation: "Pochita é o Demônio da Motosserra."
+  },
+
+  // MY HERO ACADEMIA
+  {
+    anime: "My Hero Academia", difficulty: "Fácil",
+    question: "Qual é o nome civil de Deku?",
+    options: ["Katsuki Bakugo", "Shoto Todoroki", "Izuku Midoriya", "Tenya Iida"],
+    answer: 2,
+    explanation: "Deku é o apelido de Izuku Midoriya."
+  },
+  {
+    anime: "My Hero Academia", difficulty: "Médio",
+    question: "Quem transmite o One For All para Izuku?",
+    options: ["Endeavor", "All Might", "Hawks", "Aizawa"],
+    answer: 1,
+    explanation: "All Might escolhe Izuku como sucessor."
+  },
+
+  // HUNTER X HUNTER
+  {
+    anime: "Hunter x Hunter", difficulty: "Fácil",
+    question: "Quem é o protagonista de Hunter x Hunter?",
+    options: ["Killua", "Kurapika", "Leorio", "Gon Freecss"],
+    answer: 3,
+    explanation: "Gon Freecss parte em busca de seu pai."
+  },
+  {
+    anime: "Hunter x Hunter", difficulty: "Médio",
+    question: "Qual é o sobrenome de Killua?",
+    options: ["Freecss", "Zoldyck", "Kurta", "Nostrade"],
+    answer: 1,
+    explanation: "Killua nasceu na família Zoldyck."
+  },
+
+  // BLEACH
+  {
+    anime: "Bleach", difficulty: "Fácil",
+    question: "Quem é o protagonista de Bleach?",
+    options: ["Ichigo Kurosaki", "Uryu Ishida", "Renji Abarai", "Byakuya Kuchiki"],
+    answer: 0,
+    explanation: "Ichigo Kurosaki recebe poderes de Shinigami."
+  },
+  {
+    anime: "Bleach", difficulty: "Médio",
+    question: "Qual Shinigami transfere poderes a Ichigo no começo da história?",
+    options: ["Rangiku", "Rukia Kuchiki", "Yoruichi", "Soi Fon"],
+    answer: 1,
+    explanation: "Rukia Kuchiki é fundamental para o despertar dos poderes de Ichigo."
+  },
+
+  // TOKYO GHOUL
+  {
+    anime: "Tokyo Ghoul", difficulty: "Fácil",
+    question: "Qual é o nome do protagonista?",
+    options: ["Ken Kaneki", "Hide Nagachika", "Juuzou Suzuya", "Koutarou Amon"],
+    answer: 0,
+    explanation: "Ken Kaneki passa por uma transformação que muda sua vida."
+  },
+  {
+    anime: "Tokyo Ghoul", difficulty: "Médio",
+    question: "Qual é o nome da cafeteria ligada a Kaneki?",
+    options: ["Baratie", "Anteiku", "Urahara", "Doutor"],
+    answer: 1,
+    explanation: "Anteiku é a cafeteria central para vários personagens da história."
+  },
+
+  // KAGUYA-SAMA
+  {
+    anime: "Kaguya-sama: Love Is War", difficulty: "Fácil",
+    question: "Qual é o nome do presidente do conselho estudantil?",
+    options: ["Yu Ishigami", "Miyuki Shirogane", "Tsubasa Tanuma", "Maki Shijo"],
+    answer: 1,
+    explanation: "Miyuki Shirogane é o presidente do conselho."
+  },
+  {
+    anime: "Kaguya-sama: Love Is War", difficulty: "Fácil",
+    question: "Qual é o nome da protagonista feminina?",
+    options: ["Chika Fujiwara", "Ai Hayasaka", "Kaguya Shinomiya", "Miko Iino"],
+    answer: 2,
+    explanation: "Kaguya Shinomiya é uma das protagonistas."
+  },
+
+  // YOUR NAME
+  {
+    anime: "Your Name", difficulty: "Fácil",
+    question: "Quais são os dois protagonistas de Your Name?",
+    options: ["Sakura e Syaoran", "Mitsuha e Taki", "Usagi e Mamoru", "Hina e Hodaka"],
+    answer: 1,
+    explanation: "Mitsuha Miyamizu e Taki Tachibana são os protagonistas."
+  },
+  {
+    anime: "Your Name", difficulty: "Médio",
+    question: "Que fenômeno incomum conecta a vida dos protagonistas?",
+    options: ["Viagem no tempo por uma máquina", "Troca de corpos", "Uma competição de luta", "Um jogo virtual"],
+    answer: 1,
+    explanation: "Os protagonistas começam a trocar de corpos misteriosamente."
+  },
+
+  // STEINS;GATE
+  {
+    anime: "Steins;Gate", difficulty: "Fácil",
+    question: "Qual é o apelido usado por Rintaro Okabe?",
+    options: ["Hououin Kyouma", "El Psy Kongroo", "Mad Scientist Zero", "Kuro"],
+    answer: 0,
+    explanation: "Okabe gosta de se apresentar como Hououin Kyouma."
+  },
+  {
+    anime: "Steins;Gate", difficulty: "Médio",
+    question: "Qual tema é central em Steins;Gate?",
+    options: ["Futebol profissional", "Viagem no tempo", "Caça a demônios", "Vôlei escolar"],
+    answer: 1,
+    explanation: "A história gira em torno de experimentos e mensagens através do tempo."
   }
+];
 
-  const loans = myRows(KEYS.loans);
+const MODES = {
+  5: { name: "Modo Aprendiz", count: 5 },
+  10: { name: "Modo Otaku", count: 10 },
+  30: { name: "Modo Lenda Otaku", count: 30 }
+};
 
-  const choices = loans.map((loan, index) => {
-    const name = getCustomer(loan.customerId)?.name || "Cliente removido";
+const selectedAnimes = new Set();
+let visibleAnimeLimit = 12;
+let quizQuestions = [];
+let currentIndex = 0;
+let correct = 0;
+let wrong = 0;
+let answered = false;
+let selectedMode = 5;
+let lastResultMode = 5;
 
-    return `${index + 1}. ${name} — empréstimo de ${money(loan.amount)} (saldo incluindo este pagamento: ${money(loanBalance(loan, payment.id))})`;
-  }).join("\n");
+const screens = {
+  home: $("homeScreen"),
+  quiz: $("quizScreen"),
+  result: $("resultScreen")
+};
 
-  const defaultIndex = Math.max(
-    0,
-    loans.findIndex((loan) => loan.id === payment.loanId) + 1
-  );
-
-  const choice = prompt(
-    `Corrigir pagamento: digite o número do empréstimo correto.\n\n${choices}`,
-    String(defaultIndex)
-  );
-
-  if (choice === null) return;
-
-  const index = Number(choice) - 1;
-
-  if (!Number.isInteger(index) || index < 0 || index >= loans.length) {
-    return notify("Número de empréstimo inválido.", "error");
-  }
-
-  const targetLoan = loans[index];
-
-  const amountInput = prompt(
-    "Valor correto do pagamento (R$):",
-    String(payment.amount).replace(".", ",")
-  );
-
-  if (amountInput === null) return;
-
-  const amount = Number(
-    amountInput
-      .replace(/\s/g, "")
-      .replace(/\./g, "")
-      .replace(",", ".")
-  );
-
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return notify("Valor inválido.", "error");
-  }
-
-  if (amount > loanBalance(targetLoan, payment.id) + 0.005) {
-    return notify(
-      "O valor ultrapassa o saldo do empréstimo selecionado.",
-      "error"
-    );
-  }
-
-  const date = prompt("Data correta (AAAA-MM-DD):", payment.date);
-
-  if (date === null) return;
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return notify("Data inválida.", "error");
-  }
-
-  const notes = prompt("Observação:", payment.notes || "");
-  if (notes === null) return;
-
-  const payments = myRows(KEYS.payments);
-
-  const paymentIndex = payments.findIndex(
-    (item) => item.id === paymentId
-  );
-
-  if (paymentIndex < 0) return;
-
-  payments[paymentIndex] = {
-    ...payments[paymentIndex],
-    loanId: targetLoan.id,
-    customerId: targetLoan.customerId,
-    amount,
-    date,
-    notes: notes.trim(),
-    installmentValue: installmentValue(targetLoan),
-    updatedAt: new Date().toISOString()
-  };
-
-  saveRows(KEYS.payments, payments);
-
-  recordHistory(
-    "Pagamento corrigido",
-    getCustomer(targetLoan.customerId)?.name || "Cliente",
-    amount
-  );
-
-  renderAll();
-  updatePaymentSuggestion();
-  notify("Pagamento corrigido com sucesso.");
+function showScreen(name) {
+  Object.values(screens).forEach((screen) => screen.classList.add("hidden"));
+  screens[name].classList.remove("hidden");
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function deletePayment(paymentId) {
-  const payments = myRows(KEYS.payments);
+function shuffle(array) {
+  const result = [...array];
 
-  const payment = payments.find(
-    (item) => item.id === paymentId
-  );
-
-  if (!payment) return;
-
-  if (!confirm(`Excluir o pagamento de ${money(payment.amount)}?`)) {
-    return;
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
   }
 
-  saveRows(
-    KEYS.payments,
-    payments.filter((item) => item.id !== paymentId)
-  );
-
-  recordHistory(
-    "Pagamento excluído",
-    getCustomer(payment.customerId)?.name || "Cliente",
-    payment.amount
-  );
-
-  renderAll();
-  updatePaymentSuggestion();
-  notify("Pagamento excluído.");
+  return result;
 }
 
-function showReceipt(paymentId) {
-  const payment = myRows(KEYS.payments).find(
-    (item) => item.id === paymentId
-  );
+function buildCategoryFilter() {
+  const categories = [...new Set(ANIMES.flatMap((anime) => anime.genres))]
+    .sort((a, b) => a.localeCompare(b, "pt-BR"));
 
-  if (!payment) {
-    return notify("Pagamento não encontrado.", "error");
+  for (const category of categories) {
+    const option = document.createElement("option");
+    option.value = category;
+    option.textContent = category;
+    $("categoryFilter").appendChild(option);
   }
-
-  const loan = getLoan(payment.loanId);
-
-  const customer =
-    getCustomer(payment.customerId) ||
-    getCustomer(loan?.customerId);
-
-  if (!loan) {
-    return notify("Empréstimo do pagamento não encontrado.", "error");
-  }
-
-  const installment =
-    number(payment.installmentValue) || installmentValue(loan);
-
-  const balance = loanBalance(loan);
-  const receiptNumber = String(payment.id).slice(-8).toUpperCase();
-  const installmentNumber =
-    payment.installmentNumber || nextInstallmentNumber(loan);
-
-  const receiptWindow = window.open(
-    "",
-    "_blank",
-    "width=600,height=750"
-  );
-
-  if (!receiptWindow) {
-    return notify(
-      "O navegador bloqueou o comprovante. Permita pop-ups para este app.",
-      "error"
-    );
-  }
-
-  receiptWindow.document.write(`<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Comprovante CrediFácil</title>
-<style>
-*{box-sizing:border-box}
-body{margin:0;padding:24px;background:#f4f4f6;color:#201925;font-family:Arial,sans-serif}
-.receipt{max-width:480px;margin:auto;padding:28px;background:#fff;border-radius:12px;border:1px solid #e6dce8}
-h1{margin:0;color:#e92d89;font-size:27px}
-h2{font-size:18px;margin-top:26px}
-.muted{color:#706777;font-size:13px}
-.line{display:flex;justify-content:space-between;gap:16px;padding:11px 0;border-bottom:1px solid #eee8f0}
-.line span:first-child{color:#706777}
-.line strong{text-align:right;overflow-wrap:anywhere}
-.total{margin-top:20px;padding:18px;background:#fff0f7;border-radius:8px;text-align:center}
-.total strong{display:block;margin-top:8px;color:#e92d89;font-size:28px}
-.actions{margin-top:24px;text-align:center}
-button{padding:12px 20px;margin:4px;border:0;border-radius:8px;background:#e92d89;color:white;font-weight:bold;cursor:pointer}
-button.secondary{background:#29212e}
-@media print{
-  body{padding:0;background:white}
-  .receipt{border:0;border-radius:0}
-  .actions{display:none}
-}
-</style>
-</head>
-<body>
-<main class="receipt">
-  <h1>CrediFácil</h1>
-  <p class="muted">Comprovante de pagamento · Nº ${escapeHtml(receiptNumber)}</p>
-  <h2>Dados do pagamento</h2>
-
-  <div class="line">
-    <span>Cliente</span>
-    <strong>${escapeHtml(customer?.name || "Cliente não encontrado")}</strong>
-  </div>
-
-  <div class="line">
-    <span>Data</span>
-    <strong>${formatDate(payment.date)}</strong>
-  </div>
-
-  <div class="line">
-    <span>Parcela de referência</span>
-    <strong>${escapeHtml(installmentNumber)} de ${escapeHtml(loan.installments)}</strong>
-  </div>
-
-  <div class="line">
-    <span>Valor da parcela</span>
-    <strong>${money(installment)}</strong>
-  </div>
-
-  <div class="line">
-    <span>Valor emprestado</span>
-    <strong>${money(loan.amount)}</strong>
-  </div>
-
-  <div class="line">
-    <span>Total com juros</span>
-    <strong>${money(loanTotal(loan))}</strong>
-  </div>
-
-  <div class="line">
-    <span>Saldo restante</span>
-    <strong>${money(balance)}</strong>
-  </div>
-
-  ${payment.notes ? `
-    <div class="line">
-      <span>Observação</span>
-      <strong>${escapeHtml(payment.notes)}</strong>
-    </div>
-  ` : ""}
-
-  <div class="total">
-    VALOR RECEBIDO
-    <strong>${money(payment.amount)}</strong>
-  </div>
-
-  <p class="muted" style="margin-top:24px;text-align:center">
-    Comprovante gerado pelo sistema CrediFácil.
-  </p>
-
-  <div class="actions">
-    <button onclick="window.print()">Imprimir comprovante</button>
-    <button class="secondary" onclick="window.close()">Fechar</button>
-  </div>
-</main>
-</body>
-</html>`);
-
-  receiptWindow.document.close();
 }
 
-function deleteLoan(loanId) {
-  const loan = getLoan(loanId);
-  if (!loan) return;
+function renderAnimeList() {
+  const query = $("animeSearch").value.trim().toLocaleLowerCase("pt-BR");
+  const category = $("categoryFilter").value;
 
-  const hasPayments = myRows(KEYS.payments).some(
-    (payment) => payment.loanId === loanId
-  );
-
-  if (hasPayments) {
-    return notify(
-      "Este empréstimo possui pagamentos. Exclua os pagamentos primeiro.",
-      "error"
-    );
-  }
-
-  if (!confirm("Excluir este empréstimo?")) return;
-
-  saveRows(
-    KEYS.loans,
-    myRows(KEYS.loans).filter((item) => item.id !== loanId)
-  );
-
-  recordHistory(
-    "Empréstimo excluído",
-    getCustomer(loan.customerId)?.name || "Cliente",
-    loan.amount
-  );
-
-  renderAll();
-}
-
-function saveExpense(event) {
-  event.preventDefault();
-
-  const description = $("expense-description").value.trim();
-  const amount = number($("expense-amount").value);
-  const date = $("expense-date").value;
-
-  if (!description || amount <= 0 || !date) {
-    return notify("Confira os dados da despesa.", "error");
-  }
-
-  const expense = {
-    id: id(),
-    description,
-    amount,
-    date,
-    category: $("expense-category").value,
-    createdAt: new Date().toISOString()
-  };
-
-  const expenses = myRows(KEYS.expenses);
-  expenses.push(expense);
-  saveRows(KEYS.expenses, expenses);
-
-  recordHistory("Despesa cadastrada", description, amount);
-
-  $("expense-form").reset();
-  $("expense-date").value = today();
-
-  renderAll();
-  notify("Despesa salva.");
-}
-
-function deleteExpense(expenseId) {
-  const expenses = myRows(KEYS.expenses);
-
-  const expense = expenses.find(
-    (item) => item.id === expenseId
-  );
-
-  if (!expense || !confirm(`Excluir a despesa "${expense.description}"?`)) {
-    return;
-  }
-
-  saveRows(
-    KEYS.expenses,
-    expenses.filter((item) => item.id !== expenseId)
-  );
-
-  recordHistory(
-    "Despesa excluída",
-    expense.description,
-    expense.amount
-  );
-
-  renderAll();
-  notify("Despesa excluída.");
-}
-
-function showPage(pageName) {
-  document.querySelectorAll(".page").forEach((page) => {
-    page.classList.remove("active");
+  const filtered = ANIMES.filter((anime) => {
+    const matchesSearch = anime.name.toLocaleLowerCase("pt-BR").includes(query);
+    const matchesCategory = category === "all" || anime.genres.includes(category);
+    return matchesSearch && matchesCategory;
   });
 
-  document.querySelectorAll(".nav-link").forEach((link) => {
-    link.classList.toggle("active", link.dataset.page === pageName);
-  });
+  const shown = filtered.slice(0, visibleAnimeLimit);
+  const grid = $("animeGrid");
+  grid.replaceChildren();
 
-  $(`page-${pageName}`)?.classList.add("active");
-  $("sidebar").classList.remove("open");
-}
-
-function enterApp(user) {
-  write(KEYS.session, {
-    userId: user.id,
-    name: user.name,
-    email: user.email
-  });
-
-  $("current-user-name").textContent = user.name;
-
-  showScreen("app-shell");
-  renderAll();
-  updatePaymentSuggestion();
-}
-
-function register(event) {
-  event.preventDefault();
-
-  const name = $("register-name").value.trim();
-  const email = $("register-email").value.trim().toLowerCase();
-  const password = $("register-password").value;
-  const confirmPassword = $("register-confirm").value;
-
-  if (name.length < 2) {
-    return setMessage(
-      "register-message",
-      "Informe seu nome completo.",
-      "error"
-    );
+  if (shown.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-list";
+    empty.textContent = "Nenhum anime encontrado. Tente outra pesquisa.";
+    grid.appendChild(empty);
   }
 
-  if (password.length < 6) {
-    return setMessage(
-      "register-message",
-      "A senha deve ter pelo menos 6 caracteres.",
-      "error"
-    );
-  }
+  for (const anime of shown) {
+    const label = document.createElement("label");
+    label.className = "anime-option";
+    if (selectedAnimes.has(anime.name)) label.classList.add("selected");
 
-  if (password !== confirmPassword) {
-    return setMessage(
-      "register-message",
-      "As senhas não coincidem.",
-      "error"
-    );
-  }
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = selectedAnimes.has(anime.name);
+    checkbox.setAttribute("aria-label", `Selecionar ${anime.name}`);
 
-  const users = read(KEYS.users);
-
-  if (users.some((user) => user.email === email)) {
-    return setMessage(
-      "register-message",
-      "Este e-mail já está cadastrado.",
-      "error"
-    );
-  }
-
-  const user = {
-    id: id(),
-    name,
-    email,
-    password,
-    createdAt: new Date().toISOString()
-  };
-
-  users.push(user);
-  write(KEYS.users, users);
-
-  enterApp(user);
-  $("register-form").reset();
-
-  notify("Conta criada com sucesso.");
-}
-
-function login(event) {
-  event.preventDefault();
-
-  const email = $("login-email").value.trim().toLowerCase();
-  const password = $("login-password").value;
-
-  const user = read(KEYS.users).find(
-    (item) => item.email === email && item.password === password
-  );
-
-  if (!user) {
-    return setMessage(
-      "login-message",
-      "E-mail ou senha incorretos.",
-      "error"
-    );
-  }
-
-  setMessage("login-message", "", "");
-  enterApp(user);
-  $("login-form").reset();
-}
-
-function logout() {
-  localStorage.removeItem(KEYS.session);
-  showScreen("login-screen");
-}
-
-function exportData() {
-  const data = {
-    exportedAt: new Date().toISOString(),
-    customers: myRows(KEYS.customers),
-    loans: myRows(KEYS.loans),
-    payments: myRows(KEYS.payments),
-    expenses: myRows(KEYS.expenses),
-    history: myRows(KEYS.history)
-  };
-
-  const blob = new Blob(
-    [JSON.stringify(data, null, 2)],
-    { type: "application/json" }
-  );
-
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-
-  anchor.href = url;
-  anchor.download = `credifacil-backup-${today()}.json`;
-  anchor.click();
-
-  URL.revokeObjectURL(url);
-  notify("Backup exportado.");
-}
-
-function init() {
-  $("show-register").addEventListener("click", () => {
-    setMessage("register-message", "");
-    showScreen("register-screen");
-  });
-
-  $("show-login").addEventListener("click", () => {
-    showScreen("login-screen");
-  });
-
-  $("login-form").addEventListener("submit", login);
-  $("register-form").addEventListener("submit", register);
-  $("logout-button").addEventListener("click", logout);
-
-  $("customer-form").addEventListener("submit", saveCustomer);
-  $("customer-cancel").addEventListener("click", resetCustomerForm);
-
-  $("loan-form").addEventListener("submit", saveLoan);
-  $("payment-form").addEventListener("submit", savePayment);
-  $("payment-loan").addEventListener("change", updatePaymentSuggestion);
-
-  $("expense-form").addEventListener("submit", saveExpense);
-
-  $("customer-search").addEventListener("input", renderCustomers);
-  $("loan-search").addEventListener("input", renderLoans);
-
-  $("export-data").addEventListener("click", exportData);
-
-  $("menu-toggle").addEventListener("click", () => {
-    $("sidebar").classList.toggle("open");
-  });
-
-  document.querySelectorAll(".nav-link").forEach((button) => {
-    button.addEventListener("click", () => {
-      showPage(button.dataset.page);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        selectedAnimes.add(anime.name);
+      } else {
+        selectedAnimes.delete(anime.name);
+      }
+      renderAnimeList();
+      updateAvailability();
     });
-  });
 
-  document.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-action]");
-    if (!button) return;
+    const details = document.createElement("span");
+    const title = document.createElement("span");
+    title.className = "anime-name";
+    title.textContent = anime.name;
 
-    const { action, id: itemId } = button.dataset;
+    const genres = document.createElement("span");
+    genres.className = "anime-genre";
+    genres.textContent = anime.genres.join(" · ");
 
-    if (action === "edit-customer") editCustomer(itemId);
-    if (action === "delete-customer") deleteCustomer(itemId);
-    if (action === "delete-loan") deleteLoan(itemId);
-    if (action === "edit-payment") editPayment(itemId);
-    if (action === "delete-payment") deletePayment(itemId);
-    if (action === "view-receipt") showReceipt(itemId);
-    if (action === "delete-expense") deleteExpense(itemId);
-  });
-
-  $("loan-start-date").value = today();
-  $("payment-date").value = today();
-  $("expense-date").value = today();
-
-  const session = currentSession();
-
-  if (session) {
-    const user = read(KEYS.users).find(
-      (item) => item.id === session.userId
-    );
-
-    if (user) return enterApp(user);
-
-    localStorage.removeItem(KEYS.session);
+    details.append(title, genres);
+    label.append(checkbox, details);
+    grid.appendChild(label);
   }
 
-  showScreen("login-screen");
+  const showAllButton = $("showAllButton");
+  showAllButton.classList.toggle("hidden", filtered.length <= visibleAnimeLimit);
+  showAllButton.textContent =
+    visibleAnimeLimit >= filtered.length ? "Lista completa" : `Ver todos (${filtered.length})`;
+
+  $("selectedCount").textContent = `${selectedAnimes.size} selecionados`;
 }
 
-document.addEventListener("DOMContentLoaded", init);
+function getSelectedQuestions() {
+  return QUESTIONS.filter((question) => selectedAnimes.has(question.anime));
+}
+
+function updateAvailability() {
+  const count = getSelectedQuestions().length;
+  const modes = Object.values(MODES);
+
+  if (selectedAnimes.size === 0) {
+    $("questionAvailability").textContent = "Selecione pelo menos um anime.";
+  } else {
+    const possible = modes
+      .filter((mode) => count >= mode.count)
+      .map((mode) => mode.count);
+
+    $("questionAvailability").textContent =
+      `${count} perguntas disponíveis nos animes selecionados.` +
+      (possible.length
+        ? ` Modos disponíveis: ${possible.join(", ")} perguntas.`
+        : " Escolha mais animes para liberar os modos maiores.");
+  }
+
+  document.querySelectorAll("[data-mode]").forEach((button) => {
+    const mode = Number(button.dataset.mode);
+    button.disabled = selectedAnimes.size === 0 || count < mode;
+    button.title = count < mode
+      ? `Você precisa de ${mode} perguntas disponíveis. Atualmente: ${count}.`
+      : `Começar o modo com ${mode} perguntas`;
+  });
+}
+
+function startQuiz(mode) {
+  selectedMode = Number(mode);
+  lastResultMode = selectedMode;
+
+  const pool = shuffle(getSelectedQuestions());
+
+  if (selectedAnimes.size === 0) {
+    window.alert("Escolha pelo menos um anime antes de começar!");
+    return;
+  }
+
+  if (pool.length < selectedMode) {
+    window.alert(
+      `Os animes selecionados têm apenas ${pool.length} perguntas disponíveis.\n\n` +
+      `O modo escolhido precisa de ${selectedMode} perguntas.\n` +
+      "Selecione mais animes para continuar."
+    );
+    return;
+  }
+
+  quizQuestions = pool.slice(0, selectedMode);
+  currentIndex = 0;
+  correct = 0;
+  wrong = 0;
+  answered = false;
+
+  $("quizModeLabel").textContent = MODES[selectedMode].name.toUpperCase();
+  $("quizAnimeLabel").textContent =
+    selectedAnimes.size === 1
+      ? [...selectedAnimes][0]
+      : `${selectedAnimes.size} animes selecionados`;
+
+  updateScore();
+  showScreen("quiz");
+  renderQuestion();
+}
+
+function updateScore() {
+  $("correctCount").textContent = correct;
+  $("wrongCount").textContent = wrong;
+}
+
+function renderQuestion() {
+  answered = false;
+  const question = quizQuestions[currentIndex];
+
+  $("questionCounter").textContent =
+    `${currentIndex + 1} / ${quizQuestions.length}`;
+  $("progressBar").style.width =
+    `${(currentIndex / quizQuestions.length) * 100}%`;
+
+  $("animeBadge").textContent = question.anime.toUpperCase();
+  $("difficultyBadge").textContent = question.difficulty.toUpperCase();
+  $("questionText").textContent = question.question;
+
+  $("feedback").className = "feedback hidden";
+  $("feedback").textContent = "";
+  $("nextButton").classList.add("hidden");
+  $("nextButton").textContent =
+    currentIndex === quizQuestions.length - 1
+      ? "Ver resultado 🏆"
+      : "Próxima pergunta →";
+
+  const answers = $("answers");
+  answers.replaceChildren();
+
+  question.options.forEach((option, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "answer-button";
+
+    const letter = document.createElement("span");
+    letter.className = "answer-letter";
+    letter.textContent = String.fromCharCode(65 + index);
+
+    const text = document.createElement("span");
+    text.textContent = option;
+
+    button.append(letter, text);
+    button.addEventListener("click", () => chooseAnswer(index));
+    answers.appendChild(button);
+  });
+}
+
+function chooseAnswer(index) {
+  if (answered) return;
+  answered = true;
+
+  const question = quizQuestions[currentIndex];
+  const buttons = [...$("answers").querySelectorAll("button")];
+  const feedback = $("feedback");
+
+  buttons.forEach((button) => {
+    button.disabled = true;
+  });
+
+  buttons[question.answer].classList.add("correct");
+
+  if (index === question.answer) {
+    correct++;
+    feedback.className = "feedback good";
+    feedback.textContent = `✅ Acertou, otaku! ${question.explanation}`;
+  } else {
+    wrong++;
+    buttons[index].classList.add("wrong");
+    feedback.className = "feedback bad";
+    feedback.textContent =
+      `❌ Errou! A resposta certa era: ${question.options[question.answer]}. ` +
+      question.explanation;
+  }
+
+  updateScore();
+  $("progressBar").style.width =
+    `${((currentIndex + 1) / quizQuestions.length) * 100}%`;
+  $("nextButton").classList.remove("hidden");
+}
+
+function nextQuestion() {
+  if (!answered) return;
+
+  if (currentIndex < quizQuestions.length - 1) {
+    currentIndex++;
+    renderQuestion();
+  } else {
+    showResult();
+  }
+}
+
+function showResult() {
+  showScreen("result");
+
+  const total = quizQuestions.length;
+  const percent = Math.round((correct / total) * 100);
+  const perfect = correct === total;
+
+  $("scorePercent").textContent = `${percent}%`;
+  $("resultCorrect").textContent = correct;
+  $("resultWrong").textContent = wrong;
+  $("resultMode").textContent = MODES[selectedMode].name;
+  $("resultAnimeCount").textContent =
+    new Set(quizQuestions.map((question) => question.anime)).size;
+
+  $("resultIcon").textContent = perfect ? "👑" : percent >= 70 ? "🔥" : "😂";
+
+  if (selectedMode === 5 && wrong >= 3) {
+    $("resultTitle").textContent = "KKKKKK, NOOB! 😂";
+    $("resultMessage").textContent =
+      "Você errou 3 ou mais perguntas! Vai assistir ao anime de novo, mn ksksks!";
+    $("rankMessage").textContent =
+      "📺 Treine mais um pouco e volte para provar que conhece os animes.";
+  } else if (selectedMode === 5 && perfect) {
+    $("resultTitle").textContent = "Aquecimento perfeito! 🎯";
+    $("resultMessage").textContent =
+      "Cinco de cinco! Você começou com tudo. Agora tente o Modo Otaku.";
+    $("rankMessage").textContent =
+      "⚡ Próximo desafio: 10 perguntas!";
+  } else if (selectedMode === 10 && perfect) {
+    $("resultTitle").textContent = "VOCÊ É BRABO! 🔥";
+    $("resultMessage").textContent =
+      "Parabéns! Você acertou todas as 10 perguntas. Seu conhecimento de anime é impressionante!";
+    $("rankMessage").textContent =
+      "🏆 Você conquistou o título de Otaku de Elite. Agora encare as 30 perguntas!";
+  } else if (selectedMode === 30 && perfect) {
+    $("resultTitle").textContent = "OTAKU SUPREMO! 👑";
+    $("resultMessage").textContent =
+      "KSksks, você acertou as 30 perguntas! Parabéns por ser tão Otaku!";
+    $("rankMessage").textContent =
+      "👑 TÍTULO DESBLOQUEADO: LENDA OTAKU!";
+  } else if (percent >= 70) {
+    $("resultTitle").textContent = "Mandou bem, otaku! 🔥";
+    $("resultMessage").textContent =
+      `Você acertou ${correct} de ${total}. Tá sabendo bastante, mas dá para melhorar!`;
+    $("rankMessage").textContent =
+      "💜 Jogue mais uma rodada para buscar a pontuação perfeita.";
+  } else if (percent >= 40) {
+    $("resultTitle").textContent = "Dá para melhorar! 😅";
+    $("resultMessage").textContent =
+      `Você acertou ${correct} de ${total}. Mais alguns episódios e você fica fera!`;
+    $("rankMessage").textContent =
+      "📺 Reveja seus animes favoritos e tente de novo.";
+  } else {
+    $("resultTitle").textContent = "Ih, deu ruim! 😂";
+    $("resultMessage").textContent =
+      `Você acertou ${correct} de ${total}. Ainda tem muito anime para descobrir!`;
+    $("rankMessage").textContent =
+      "🍜 Treine seus conhecimentos e volte para o desafio.";
+  }
+}
+
+$("animeSearch").addEventListener("input", () => {
+  visibleAnimeLimit = ANIMES.length;
+  renderAnimeList();
+});
+
+$("categoryFilter").addEventListener("change", () => {
+  visibleAnimeLimit = ANIMES.length;
+  renderAnimeList();
+});
+
+$("selectAllButton").addEventListener("click", () => {
+  const query = $("animeSearch").value.trim().toLocaleLowerCase("pt-BR");
+  const category = $("categoryFilter").value;
+
+  const matching = ANIMES.filter((anime) => {
+    const matchesSearch = anime.name.toLocaleLowerCase("pt-BR").includes(query);
+    const matchesCategory = category === "all" || anime.genres.includes(category);
+    return matchesSearch && matchesCategory;
+  });
+
+  matching.forEach((anime) => selectedAnimes.add(anime.name));
+  renderAnimeList();
+  updateAvailability();
+});
+
+$("clearButton").addEventListener("click", () => {
+  selectedAnimes.clear();
+  renderAnimeList();
+  updateAvailability();
+});
+
+$("showAllButton").addEventListener("click", () => {
+  visibleAnimeLimit = ANIMES.length;
+  renderAnimeList();
+});
+
+document.querySelectorAll("[data-mode]").forEach((button) => {
+  button.addEventListener("click", () => startQuiz(button.dataset.mode));
+});
+
+$("nextButton").addEventListener("click", nextQuestion);
+
+$("quitButton").addEventListener("click", () => {
+  if (window.confirm("Sair do desafio? O progresso desta rodada será perdido.")) {
+    showScreen("home");
+  }
+});
+
+$("retryButton").addEventListener("click", () => {
+  startQuiz(lastResultMode);
+});
+
+$("homeButton").addEventListener("click", () => {
+  showScreen("home");
+});
+
+buildCategoryFilter();
+renderAnimeList();
+updateAvailability();
+
+console.log("Desafio Otaku carregado!");
+console.log(`${ANIMES.length} animes cadastrados.`);
+console.log(`${QUESTIONS.length} perguntas cadastradas.`);
