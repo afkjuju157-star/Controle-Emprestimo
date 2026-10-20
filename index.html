@@ -1,355 +1,166 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#0b0910">
-  <title>CrediFácil | Controle de Empréstimos</title>
-  <link rel="stylesheet" href="./index.css">
-  <script src="./main.js" defer></script>
+  <meta name="theme-color" content="#100d20">
+  <title>Desafio Otaku</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="main.js" defer></script>
 </head>
 <body>
-  <section id="login-screen" class="auth-screen">
-    <form id="login-form" class="auth-card">
-      <div class="brand-mark">CF</div>
-      <h1>Credi<span>Fácil</span></h1>
-      <p>Entre na sua conta para continuar.</p>
+  <header class="topbar">
+    <a class="logo" href="#" aria-label="Desafio Otaku">
+      <span class="logo-icon">卍</span>
+      <span>DESAFIO <strong>OTAKU</strong></span>
+    </a>
+    <span class="version">ANIME QUIZ</span>
+  </header>
 
-      <label for="login-email">E-mail</label>
-      <input id="login-email" type="email" autocomplete="username" required>
-
-      <label for="login-password">Senha</label>
-      <input id="login-password" type="password" autocomplete="current-password" required>
-
-      <button type="submit">Entrar</button>
-
-      <p class="auth-switch">
-        Ainda não tem conta?
-        <button type="button" id="show-register" class="link-button">Criar conta</button>
-      </p>
-      <p id="login-message" class="message" role="status"></p>
-    </form>
-  </section>
-
-  <section id="register-screen" class="auth-screen hidden">
-    <form id="register-form" class="auth-card">
-      <div class="brand-mark">CF</div>
-      <h1>Criar conta</h1>
-      <p>Cadastre-se para começar a usar o CrediFácil.</p>
-
-      <label for="register-name">Nome</label>
-      <input id="register-name" type="text" autocomplete="name" required>
-
-      <label for="register-email">E-mail</label>
-      <input id="register-email" type="email" autocomplete="email" required>
-
-      <label for="register-password">Senha</label>
-      <input id="register-password" type="password" minlength="6" autocomplete="new-password" required>
-
-      <label for="register-confirm">Confirmar senha</label>
-      <input id="register-confirm" type="password" minlength="6" autocomplete="new-password" required>
-
-      <button type="submit">Cadastrar</button>
-
-      <p class="auth-switch">
-        Já tem uma conta?
-        <button type="button" id="show-login" class="link-button">Fazer login</button>
-      </p>
-      <p id="register-message" class="message" role="status"></p>
-    </form>
-  </section>
-
-  <div id="app-shell" class="app-shell hidden">
-    <header class="topbar">
-      <button type="button" id="menu-toggle" class="icon-button" aria-label="Abrir menu">☰</button>
-      <a href="#" class="brand"><span class="brand-mark small">CF</span> Credi<span>Fácil</span></a>
-      <div class="user-area">
-        <span id="current-user-name">Usuário</span>
-        <button id="logout-button" type="button" class="button-outline">Sair</button>
+  <main class="container">
+    <section id="homeScreen" class="screen">
+      <div class="hero">
+        <div class="hero-tag">⚡ O teste definitivo dos animes</div>
+        <h1>Você é um<br><span>verdadeiro Otaku?</span></h1>
+        <p class="subtitle">
+          Escolha seus animes favoritos, selecione um desafio
+          e prove que você conhece esse universo!
+        </p>
       </div>
-    </header>
 
-    <div class="app-layout">
-      <aside id="sidebar" class="sidebar">
-        <p class="sidebar-caption">MENU PRINCIPAL</p>
-        <button class="nav-link active" data-page="dashboard" type="button">▦ Dashboard</button>
-        <button class="nav-link" data-page="customers" type="button">♙ Clientes</button>
-        <button class="nav-link" data-page="installments" type="button">▤ Empréstimos</button>
-        <button class="nav-link" data-page="expenses" type="button">↘ Despesas</button>
-        <button class="nav-link" data-page="history" type="button">◷ Histórico</button>
-        <div class="sidebar-footer">Controle financeiro<br><span>CrediFácil</span></div>
-      </aside>
-
-      <main class="main-content">
-        <section id="page-dashboard" class="page active">
-          <div class="page-heading">
-            <div>
-              <p class="eyebrow">VISÃO GERAL</p>
-              <h2>Dashboard</h2>
-              <p>Acompanhe os resultados da sua carteira.</p>
-            </div>
+      <section class="selection-panel">
+        <div class="section-heading">
+          <div>
+            <h2>🎌 Escolha seus animes</h2>
+            <p>O quiz usará perguntas somente dos animes selecionados.</p>
           </div>
+          <span id="selectedCount" class="selection-count">0 selecionados</span>
+        </div>
 
-          <div class="stats-grid">
-            <article class="stat-card">
-              <div class="stat-label">Clientes Novos <span class="stat-icon violet">♙</span></div>
-              <strong id="total-customers">0</strong>
-              <small>Total de clientes cadastrados</small>
-            </article>
-            <article class="stat-card">
-              <div class="stat-label">Empréstimos <span class="stat-icon">▤</span></div>
-              <strong id="total-loans">0</strong>
-              <small>Empréstimos cadastrados</small>
-            </article>
-            <article class="stat-card">
-              <div class="stat-label">Total emprestado <span class="stat-icon">↗</span></div>
-              <strong id="total-lent">R$ 0,00</strong>
-              <small>Valor principal liberado</small>
-            </article>
-            <article class="stat-card">
-              <div class="stat-label">Recebido <span class="stat-icon">✓</span></div>
-              <strong id="total-received">R$ 0,00</strong>
-              <small>Total de pagamentos registrados</small>
-            </article>
-            <article class="stat-card">
-              <div class="stat-label">Em aberto <span class="stat-icon violet">◷</span></div>
-              <strong id="total-open">R$ 0,00</strong>
-              <small>Saldo restante dos empréstimos</small>
-            </article>
-            <article class="stat-card">
-              <div class="stat-label">Despesas <span class="stat-icon">↘</span></div>
-              <strong id="total-expenses">R$ 0,00</strong>
-              <small>Despesas registradas</small>
-            </article>
-            <article class="stat-card">
-              <div class="stat-label">Resultado <span class="stat-icon">∑</span></div>
-              <strong id="financial-result">R$ 0,00</strong>
-              <small>Recebimentos menos despesas</small>
-            </article>
-            <article class="stat-card">
-              <div class="stat-label">Recebido hoje <span class="stat-icon">◷</span></div>
-              <strong id="received-today">R$ 0,00</strong>
-              <small>Pagamentos de hoje</small>
-            </article>
+        <div class="filters">
+          <input id="animeSearch" type="search"
+            placeholder="🔎 Pesquisar anime..."
+            aria-label="Pesquisar anime">
+
+          <select id="categoryFilter" aria-label="Filtrar por categoria">
+            <option value="all">Todos os gêneros</option>
+          </select>
+        </div>
+
+        <div class="selection-actions">
+          <button id="selectAllButton" class="small-button">☑ Selecionar todos</button>
+          <button id="clearButton" class="small-button">Limpar seleção</button>
+        </div>
+
+        <div id="animeGrid" class="anime-grid"></div>
+
+        <div class="selection-bottom">
+          <span id="questionAvailability">Selecione seus animes para começar.</span>
+          <button id="showAllButton" class="small-button">Ver todos</button>
+        </div>
+      </section>
+
+      <section class="modes-section">
+        <div class="section-heading">
+          <div>
+            <h2>🏆 Escolha seu desafio</h2>
+            <p>As perguntas não se repetem na mesma rodada.</p>
           </div>
+        </div>
 
-          <div class="content-card">
-            <div class="section-heading">
-              <div>
-                <h3>Pagamentos recentes</h3>
-                <p>Últimos pagamentos lançados.</p>
-              </div>
-            </div>
-            <div id="dashboard-payments" class="table-wrap"></div>
-          </div>
-        </section>
+        <div class="mode-grid">
+          <button class="mode-card beginner" data-mode="5">
+            <span class="mode-icon">🎯</span>
+            <span class="mode-label">MODO 01</span>
+            <h3>Aprendiz</h3>
+            <p>Um aquecimento de respeito.</p>
+            <span class="mode-count">5 PERGUNTAS</span>
+            <span class="mode-arrow">COMEÇAR →</span>
+          </button>
 
-        <section id="page-customers" class="page">
-          <div class="page-heading">
-            <div>
-              <p class="eyebrow">CADASTRO</p>
-              <h2>Clientes</h2>
-              <p>Cadastre e gerencie seus clientes.</p>
-            </div>
-          </div>
+          <button class="mode-card otaku" data-mode="10">
+            <span class="mode-icon">🔥</span>
+            <span class="mode-label">MODO 02</span>
+            <h3>Otaku</h3>
+            <p>Mostre o que você sabe.</p>
+            <span class="mode-count">10 PERGUNTAS</span>
+            <span class="mode-arrow">COMEÇAR →</span>
+          </button>
 
-          <div class="content-card">
-            <h3 id="customer-form-title">Novo cliente</h3>
-            <form id="customer-form" class="form-grid">
-              <input type="hidden" id="customer-id">
-              <div>
-                <label for="customer-name">Nome completo *</label>
-                <input id="customer-name" required maxlength="120">
-              </div>
-              <div>
-                <label for="customer-phone">Telefone</label>
-                <input id="customer-phone" type="tel">
-              </div>
-              <div>
-                <label for="customer-document">CPF</label>
-                <input id="customer-document" inputmode="numeric">
-              </div>
-              <div>
-                <label for="customer-address">Endereço</label>
-                <input id="customer-address">
-              </div>
-              <div class="form-actions">
-                <button type="submit">Salvar cliente</button>
-                <button type="button" id="customer-cancel" class="button-outline">Limpar</button>
-              </div>
-            </form>
-          </div>
+          <button class="mode-card legend" data-mode="30">
+            <span class="mode-icon">👑</span>
+            <span class="mode-label">MODO 03</span>
+            <h3>Lenda Otaku</h3>
+            <p>Um desafio para os brabos.</p>
+            <span class="mode-count">30 PERGUNTAS</span>
+            <span class="mode-arrow">COMEÇAR →</span>
+          </button>
+        </div>
+      </section>
+    </section>
 
-          <div class="content-card">
-            <div class="section-heading">
-              <h3>Clientes cadastrados</h3>
-              <input id="customer-search" class="search-input" placeholder="Buscar cliente...">
-            </div>
-            <div id="customers-list" class="table-wrap"></div>
-          </div>
-        </section>
+    <section id="quizScreen" class="screen hidden">
+      <div class="quiz-top">
+        <button id="quitButton" class="back-button">← Sair</button>
+        <div>
+          <div id="quizModeLabel" class="quiz-mode-label">MODO OTAKU</div>
+          <div id="quizAnimeLabel" class="quiz-anime-label"></div>
+        </div>
+        <div id="questionCounter" class="question-counter">1 / 10</div>
+      </div>
 
-        <section id="page-installments" class="page">
-          <div class="page-heading">
-            <div>
-              <p class="eyebrow">CRÉDITO</p>
-              <h2>Empréstimos e pagamentos</h2>
-              <p>Registre empréstimos e acompanhe as parcelas.</p>
-            </div>
-          </div>
+      <div class="progress-track">
+        <div id="progressBar" class="progress-bar"></div>
+      </div>
 
-          <div class="content-card">
-            <h3>Novo empréstimo</h3>
-            <form id="loan-form" class="form-grid">
-              <div>
-                <label for="loan-customer">Cliente *</label>
-                <select id="loan-customer" required>
-                  <option value="">Selecione um cliente</option>
-                </select>
-              </div>
-              <div>
-                <label for="loan-amount">Valor emprestado (R$) *</label>
-                <input id="loan-amount" type="number" min="0.01" step="0.01" required>
-              </div>
-              <div>
-                <label for="loan-interest">Juros (%)</label>
-                <input id="loan-interest" type="number" min="0" step="0.01" value="0">
-              </div>
-              <div>
-                <label for="loan-installments">Número de parcelas *</label>
-                <input id="loan-installments" type="number" min="1" max="600" value="1" required>
-              </div>
-              <div>
-                <label for="loan-frequency">Frequência</label>
-                <select id="loan-frequency">
-                  <option value="daily">Diária</option>
-                  <option value="weekly">Semanal</option>
-                  <option value="monthly">Mensal</option>
-                </select>
-              </div>
-              <div>
-                <label for="loan-start-date">Data do empréstimo *</label>
-                <input id="loan-start-date" type="date" required>
-              </div>
-              <div class="form-actions">
-                <button type="submit">Cadastrar empréstimo</button>
-              </div>
-            </form>
-          </div>
+      <div class="quiz-card">
+        <div class="question-meta">
+          <span id="animeBadge" class="anime-badge">ANIME</span>
+          <span id="difficultyBadge" class="difficulty-badge">FÁCIL</span>
+        </div>
 
-          <div class="content-card">
-            <div class="section-heading">
-              <h3>Empréstimos cadastrados</h3>
-              <input id="loan-search" class="search-input" placeholder="Buscar cliente...">
-            </div>
-            <div id="loans-list" class="table-wrap"></div>
-          </div>
+        <h2 id="questionText">Carregando pergunta...</h2>
+        <div id="answers" class="answers"></div>
 
-          <div class="content-card">
-            <h3>Registrar pagamento</h3>
-            <form id="payment-form" class="form-grid">
-              <div>
-                <label for="payment-loan">Empréstimo *</label>
-                <select id="payment-loan" required>
-                  <option value="">Selecione um empréstimo</option>
-                </select>
-              </div>
-              <div>
-                <label for="payment-installment-value">Valor da parcela (R$)</label>
-                <input id="payment-installment-value" type="text" readonly placeholder="Selecione um empréstimo">
-              </div>
-              <div>
-                <label for="payment-amount">Valor recebido (R$) *</label>
-                <input id="payment-amount" type="number" min="0.01" step="0.01" required>
-              </div>
-              <div>
-                <label for="payment-date">Data do pagamento *</label>
-                <input id="payment-date" type="date" required>
-              </div>
-              <div>
-                <label for="payment-notes">Observação</label>
-                <input id="payment-notes" maxlength="250">
-              </div>
-              <div class="form-actions">
-                <button type="submit">Registrar pagamento</button>
-              </div>
-            </form>
-          </div>
+        <div id="feedback" class="feedback hidden" role="status" aria-live="polite"></div>
+        <button id="nextButton" class="primary-button hidden">Próxima pergunta →</button>
+      </div>
 
-          <div class="content-card">
-            <h3>Histórico de pagamentos</h3>
-            <p class="muted">Use Editar para corrigir o cliente, empréstimo, valor ou data. Excluir remove o lançamento.</p>
-            <div id="payments-list" class="table-wrap"></div>
-          </div>
-        </section>
+      <div class="quiz-footer">
+        <span>✅ Acertos: <b id="correctCount">0</b></span>
+        <span>❌ Erros: <b id="wrongCount">0</b></span>
+      </div>
+    </section>
 
-        <section id="page-expenses" class="page">
-          <div class="page-heading">
-            <div>
-              <p class="eyebrow">CONTROLE FINANCEIRO</p>
-              <h2>Despesas</h2>
-              <p>Registre os gastos do seu negócio.</p>
-            </div>
-          </div>
+    <section id="resultScreen" class="screen hidden">
+      <div id="resultIcon" class="result-icon">🏆</div>
+      <div class="hero-tag">RESULTADO DO DESAFIO</div>
+      <h1 id="resultTitle">Mandou bem!</h1>
+      <p id="resultMessage" class="subtitle"></p>
 
-          <div class="content-card">
-            <h3>Nova despesa</h3>
-            <form id="expense-form" class="form-grid">
-              <div>
-                <label for="expense-description">Descrição *</label>
-                <input id="expense-description" required maxlength="150">
-              </div>
-              <div>
-                <label for="expense-amount">Valor (R$) *</label>
-                <input id="expense-amount" type="number" min="0.01" step="0.01" required>
-              </div>
-              <div>
-                <label for="expense-category">Categoria</label>
-                <select id="expense-category">
-                  <option value="Geral">Geral</option>
-                  <option value="Transporte">Transporte</option>
-                  <option value="Material">Material</option>
-                  <option value="Taxas">Taxas</option>
-                  <option value="Outros">Outros</option>
-                </select>
-              </div>
-              <div>
-                <label for="expense-date">Data *</label>
-                <input id="expense-date" type="date" required>
-              </div>
-              <div class="form-actions">
-                <button type="submit">Salvar despesa</button>
-              </div>
-            </form>
-          </div>
+      <div class="result-card">
+        <div class="score-circle">
+          <strong id="scorePercent">100%</strong>
+          <span>ACERTOS</span>
+        </div>
+        <div class="result-stats">
+          <div><span>Respostas certas</span><b id="resultCorrect">0</b></div>
+          <div><span>Respostas erradas</span><b id="resultWrong">0</b></div>
+          <div><span>Modo escolhido</span><b id="resultMode">Otaku</b></div>
+          <div><span>Animes utilizados</span><b id="resultAnimeCount">0</b></div>
+        </div>
+      </div>
 
-          <div class="content-card">
-            <h3>Despesas registradas</h3>
-            <div id="expenses-list" class="table-wrap"></div>
-          </div>
-        </section>
+      <div id="rankMessage" class="rank-message"></div>
 
-        <section id="page-history" class="page">
-          <div class="page-heading">
-            <div>
-              <p class="eyebrow">REGISTROS</p>
-              <h2>Histórico</h2>
-              <p>Acompanhe as operações realizadas no sistema.</p>
-            </div>
-          </div>
+      <div class="result-actions">
+        <button id="retryButton" class="primary-button">🔄 Jogar novamente</button>
+        <button id="homeButton" class="secondary-button">🎌 Voltar à seleção</button>
+      </div>
+    </section>
+  </main>
 
-          <div class="content-card">
-            <div class="section-heading">
-              <h3>Atividades</h3>
-              <button type="button" id="export-data" class="button-outline">Exportar backup</button>
-            </div>
-            <div id="history-list" class="table-wrap"></div>
-          </div>
-        </section>
-      </main>
-    </div>
-  </div>
-
-  <div id="toast" class="toast" role="status"></div>
+  <footer class="footer">DESAFIO OTAKU · Feito para fãs de anime 🎌</footer>
 </body>
 </html>
