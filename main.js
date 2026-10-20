@@ -1,534 +1,800 @@
 "use strict";
 
 const $ = id => document.getElementById(id);
+const LETTERS = ["A", "B", "C", "D"];
 
-function shuffle(arr) {
-    const a = [...arr];
-    for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-}
-
-// Lista de animes
 const animeList = [
-    { name: "Naruto", emoji: "🍥" },
-    { name: "One Piece", emoji: "🏴‍☠️" },
-    { name: "Dragon Ball", emoji: "🐉" },
-    { name: "Demon Slayer", emoji: "🗡️" },
-    { name: "Jujutsu Kaisen", emoji: "👊" },
-    { name: "Attack on Titan", emoji: "🧱" },
-    { name: "My Hero Academia", emoji: "💥" },
-    { name: "Death Note", emoji: "📓" },
-    { name: "Spy x Family", emoji: "🕵️" },
-    { name: "Hunter x Hunter", emoji: "🎣" },
-    { name: "Bleach", emoji: "⚔️" },
-    { name: "Tokyo Revengers", emoji: "🕰️" },
-    { name: "Solo Leveling", emoji: "💫" },
-    { name: "Chainsaw Man", emoji: "🪚" },
-    { name: "Fullmetal Alchemist", emoji: "⚙️" }
+  {id:"nanatsu",name:"Nanatsu no Taizai",icon:"⚔️",genre:"Fantasía"},
+  {id:"aot",name:"Attack on Titan",icon:"🧱",genre:"Acción"},
+  {id:"shangri",name:"Shangri-La Frontier",icon:"🎮",genre:"Aventura"},
+  {id:"edens",name:"Edens Zero",icon:"🚀",genre:"Ciencia ficción"},
+  {id:"jjk",name:"Jujutsu Kaisen",icon:"👊",genre:"Sobrenatural"},
+  {id:"pokemon",name:"Pokémon",icon:"⚡",genre:"Aventura"},
+  {id:"dragonball",name:"Dragon Ball",icon:"🐉",genre:"Acción"},
+  {id:"foodwars",name:"Food Wars! (Soma Yukihira)",icon:"🍜",genre:"Cocina"},
+  {id:"konosuba",name:"KonoSuba",icon:"💥",genre:"Comedia"},
+  {id:"naruto",name:"Naruto",icon:"🍥",genre:"Ninja"},
+  {id:"blackclover",name:"Black Clover",icon:"🍀",genre:"Fantasía"},
+  {id:"plunderer",name:"Plunderer",icon:"🔢",genre:"Fantasía"},
+  {id:"tokyo",name:"Tokyo Revengers",icon:"🛵",genre:"Drama"},
+  {id:"fma",name:"Fullmetal Alchemist: Brotherhood",icon:"⚗️",genre:"Fantasía"},
+  {id:"onepiece",name:"One Piece",icon:"🏴‍☠️",genre:"Aventura"},
+  {id:"demonslayer",name:"Demon Slayer",icon:"🌊",genre:"Acción"},
+  {id:"deathnote",name:"Death Note",icon:"📓",genre:"Suspenso"},
+  {id:"spyfamily",name:"Spy x Family",icon:"🕵️",genre:"Comedia"},
+  {id:"hxh",name:"Hunter x Hunter",icon:"🎣",genre:"Aventura"},
+  {id:"bleach",name:"Bleach",icon:"🗡️",genre:"Sobrenatural"},
+  {id:"sololeveling",name:"Solo Leveling",icon:"🌑",genre:"Acción"},
+  {id:"chainsaw",name:"Chainsaw Man",icon:"🪚",genre:"Acción"},
+  {id:"mha",name:"My Hero Academia",icon:"💚",genre:"Superhéroes"},
+  {id:"tokyoghoul",name:"Tokyo Ghoul",icon:"🩸",genre:"Horror"}
 ];
 
-// Banco de preguntas
-const questions = [];
+/*
+  Cada pregunta tiene este formato:
+  [pregunta, respuesta correcta, [3 respuestas incorrectas]]
+  Se mezclan las opciones para que la correcta no esté siempre en la misma letra.
+*/
 
-function addQ(anime, level, text, opt, correct) {
-    questions.push({ anime, level, text, options: opt, correct });
+const BANK = {
+nanatsu:[
+["¿Quién es el capitán de los Siete Pecados Capitales?","Meliodas",["Ban","King","Escanor"]],
+["¿Qué pecado representa Ban?","Avaricia",["Ira","Envidia","Pereza"]],
+["¿Cómo se llama el cerdito compañero del grupo?","Hawk",["Gilthunder","Zaratras","Griamore"]],
+["¿Qué pecado representa Diane?","Envidia",["Orgullo","Gula","Lujuria"]],
+["¿Cuál es el tesoro sagrado de Meliodas?","Lostvayne",["Courechouse","Gideon","Rita"]],
+["¿Qué pecado representa King?","Pereza",["Ira","Avaricia","Orgullo"]],
+["¿Qué raza es Elizabeth?","Diosa",["Gigante","Hada","Vampira"]],
+["¿Cómo se llama el reino principal de la historia?","Liones",["Clover","Fiore","Amestris"]],
+["¿Qué pecado representa Escanor?","Orgullo",["Envidia","Pereza","Avaricia"]],
+["¿Cuál es el poder característico de Escanor durante el día?","Sunshine",["Black Flash","Gear Second","Alquimia"]],
+["¿Quién es el hermano de Meliodas?","Zeldris",["Ban","Gowther","Gilthunder"]],
+["¿Qué pecado representa Gowther?","Lujuria",["Gula","Ira","Pereza"]],
+["¿Qué tipo de criatura es Diane?","Gigante",["Hada","Diosa","Humana"]],
+["¿Quién es conocida como la Serpiente de la Envidia?","Diane",["Merlin","Elizabeth","Elaine"]],
+["¿Qué grupo reúne a los siete protagonistas?","Los Siete Pecados Capitales",["Los Caballeros Mágicos","La Brigada Fantasma","Los Homúnculos"]]
+],
+aot:[
+["¿Quién es el protagonista principal?","Eren Yeager",["Armin Arlert","Jean Kirstein","Levi Ackerman"]],
+["¿Quién es la amiga de infancia de Eren?","Mikasa Ackerman",["Sasha Blouse","Historia Reiss","Annie Leonhart"]],
+["¿Qué cuerpo militar explora el exterior de las murallas?","Cuerpo de Exploración",["Policía Militar","Guarnición","Brigada Fantasma"]],
+["¿Cómo se llama el titán de Eren al principio?","Titán de Ataque",["Titán Bestia","Titán Mandíbula","Titán Carro"]],
+["¿Quién es conocido como el soldado más fuerte de la humanidad?","Levi Ackerman",["Jean Kirstein","Connie Springer","Marco Bott"]],
+["¿Qué comida le encanta a Sasha?","Patatas",["Manzanas","Pescado crudo","Pasteles"]],
+["¿Quién es el amigo de Eren que destaca por su inteligencia?","Armin Arlert",["Reiner Braun","Porco Galliard","Floch Forster"]],
+["¿Qué protege a la humanidad al inicio de la historia?","Las murallas",["Un campo mágico","Un océano de lava","Un ejército de dragones"]],
+["¿Quién puede transformarse en el Titán Colosal al principio?","Bertholdt Hoover",["Jean Kirstein","Connie Springer","Erwin Smith"]],
+["¿Cómo se llama la muralla más exterior?","María",["Rose","Sina","Trost"]],
+["¿Qué personaje es comandante del Cuerpo de Exploración?","Erwin Smith",["Dot Pixis","Kenny Ackerman","Theo Magath"]],
+["¿Qué tipo de seres amenazan a la humanidad?","Titanes",["Hollows","Homúnculos","Demonios de sangre"]],
+["¿Qué personaje es hermana adoptiva de Eren?","Mikasa Ackerman",["Annie Leonhart","Pieck Finger","Ymir Fritz"]],
+["¿Qué organización militar protege principalmente las murallas?","Guarnición",["Marina","Cuerpo de Alquimistas","Seguridad Pública"]],
+["¿Cuál es uno de los grandes misterios al comienzo de la serie?","El origen de los titanes",["El origen de los pokémon","La receta de Soma","El tesoro de los piratas"]]
+],
+shangri:[
+["¿Cómo se llama el protagonista de Shangri-La Frontier?","Rakuro Hizutome",["Sun Jinwoo","Shiki Granbell","Asta"]],
+["¿Qué apodo utiliza Rakuro al jugar?","Sunraku",["Kirito","Deku","Luffy"]],
+["¿Qué tipo de juegos suele disfrutar Rakuro antes de Shangri-La Frontier?","Juegos malos o defectuosos",["Solo juegos de cocina","Juegos exclusivamente deportivos","Juegos de cartas profesionales"]],
+["¿Qué tipo de obra es Shangri-La Frontier?","Una aventura centrada en un videojuego",["Un drama histórico sin juegos","Un documental culinario","Una historia de detectives realistas"]],
+["¿Qué busca Rakuro al jugar?","Superar desafíos y disfrutar del juego",["Convertirse en Hokage","Encontrar la Death Note","Ser el Rey Mago"]],
+["¿Cómo se llama la compañera de Rakuro que usa el nombre Psyger-0?","Rei Saiga",["Makima","Nobara Kugisaki","Noelle Silva"]],
+["¿Qué tipo de equipo suele usar Sunraku?","Equipo ligero para moverse con agilidad",["Una armadura espacial pesada","Un uniforme de chef","Una capa de alquimista estatal"]],
+["¿Qué destaca del estilo de Sunraku?","Su habilidad y adaptación en combate",["Su poder para cocinar","Su capacidad de alquimia","Su habilidad para controlar titanes"]],
+["¿Qué clase de mundo explora Sunraku?","Un mundo virtual de fantasía",["Una ciudad real sin videojuegos","Una escuela de cocina","Una colonia espacial moderna"]],
+["¿Qué tipo de desafío presenta el juego principal?","Enemigos y misiones difíciles",["Exámenes de cocina únicamente","Carreras de autos reales","Partidos de béisbol"]],
+["¿Qué hace Rakuro antes de empezar un juego nuevo?","Aprende sus mecánicas jugando",["Pide ser Hokage","Se convierte en pirata","Escribe un cuaderno sobrenatural"]],
+["¿Qué medio dio origen a la historia?","Una novela web",["Un libro de recetas","Un manual de deportes","Un cómic occidental de superhéroes"]],
+["¿Qué género describe mejor la serie?","Aventura y videojuegos",["Romance histórico únicamente","Terror psicológico realista","Drama judicial"]],
+["¿Qué caracteriza a muchos enemigos del juego?","Diseños y patrones de combate particulares",["Todos son idénticos","Solo pueden cocinar","No pueden atacar"]],
+["¿Qué hace que Sunraku destaque?","Su experiencia con juegos difíciles",["Ser el padre de Deku","Ser un shinigami","Ser un titán colosal"]]
+],
+edens:[
+["¿Cómo se llama el protagonista de Edens Zero?","Shiki Granbell",["Eren Yeager","Asta","Denji"]],
+["¿Qué poder usa Shiki?","Ether Gear de gravedad",["Alquimia de fuego","Respiración del Agua","Sharingan"]],
+["¿Cómo se llama la compañera androide de Shiki?","Rebecca Bluegarden",["Lucy Heartfilia","Mikasa Ackerman","Nobara Kugisaki"]],
+["¿Cómo se llama la nave principal del grupo?","Edens Zero",["Going Merry","Thousand Sunny","Baratie"]],
+["¿Qué busca Shiki al viajar por el espacio?","Encontrar a Mother",["Encontrar el One Piece","Ser Hokage","Encontrar la Death Note"]],
+["¿Quién es Happy?","Un androide con apariencia de gato",["Un titán","Un alquimista","Un pirata humano"]],
+["¿Qué género combina la serie?","Ciencia ficción y aventura",["Solo cocina","Deportes escolares","Historia documental"]],
+["¿Cómo se llama el creador de Edens Zero?","Hiro Mashima",["Eiichiro Oda","Tite Kubo","Tsugumi Ohba"]],
+["¿Qué medio de transporte usan para viajar entre mundos?","Una nave espacial",["Un tren de vapor solamente","Una bicicleta mágica","Un submarino escolar"]],
+["¿Quién es una de las Cuatro Estrellas Brillantes del Rey Demonio?","Witch Regret",["Sakura Haruno","Rukia Kuchiki","Misa Amane"]],
+["¿Qué es Pino?","Una androide",["Una pirata humana","Una alquimista estatal","Una cazadora de titanes"]],
+["¿Qué nombre tiene el Rey Demonio al que acompaña Shiki?","Ziggy",["Zeref","Madara","Aizen"]],
+["¿Qué elemento de la historia es central?","La amistad entre humanos y máquinas",["La búsqueda de recetas únicamente","Los torneos de tenis","La investigación policial realista"]],
+["¿En qué entorno ocurre gran parte de la aventura?","En el espacio",["Solo en una escuela","Solo en un pueblo medieval","En una isla desierta sin tecnología"]],
+["¿Qué quiere Rebecca hacer con sus aventuras?","Crear videos para B-Cube",["Ser la Hokage","Trabajar en la Marina","Escribir un cuaderno de muerte"]]
+],
+jjk:[
+["¿Cómo se llama el protagonista de Jujutsu Kaisen?","Yuji Itadori",["Megumi Fushiguro","Yuta Okkotsu","Kento Nanami"]],
+["¿Qué objeto maldito se traga Yuji?","Un dedo de Sukuna",["Una Death Note","Una esfera del dragón","Una piedra filosofal"]],
+["¿Quién es el maestro de Yuji, Megumi y Nobara?","Satoru Gojo",["Suguru Geto","Toji Fushiguro","Aoi Todo"]],
+["¿Cómo se llama la energía utilizada por los hechiceros?","Energía maldita",["Nen","Ether Gear","Chakra espiritual de alquimia"]],
+["¿Qué técnica caracteriza a Gojo?","Limitless",["Sunshine","One For All","Gear Fifth"]],
+["¿Quién es el compañero de Yuji que usa sombras?","Megumi Fushiguro",["Toge Inumaki","Panda","Kento Nanami"]],
+["¿Qué arma suele usar Nobara Kugisaki?","Martillo y clavos",["Una guadaña gigante","Una pistola de agua","Una espada de alquimista"]],
+["¿Quién es Ryomen Sukuna?","El Rey de las Maldiciones",["El Rey Pirata","El Rey Mago","El Rey de los Titanes"]],
+["¿Qué dice a menudo Toge Inumaki para comunicarse?","Ingredientes de onigiri",["Nombres de planetas","Recetas de curry","Nombres de pokémon"]],
+["¿Qué institución frecuentan los protagonistas?","Escuela Técnica de Hechicería de Tokio",["Academia U.A.","Academia Totsuki","Escuela de Eden"]],
+["¿Quién es el compañero panda del grupo?","Panda",["Hawk","Happy","Bond"]],
+["¿Qué tipo de seres nacen de emociones negativas?","Maldiciones",["Titanes","Homúnculos","Pokémon"]],
+["¿Qué personaje es conocido por su técnica de proporción?","Kento Nanami",["Aoi Todo","Mahito","Junpei Yoshino"]],
+["¿Qué técnica de dominio utiliza Gojo?","Vacío Infinito",["Expansión de Dominio: Santuario Malevolente","Sunshine","Black Clover"]],
+["¿Qué género define mejor la serie?","Acción sobrenatural",["Cocina competitiva","Deportes de invierno","Comedia romántica histórica"]]
+],
+pokemon:[
+["¿Cómo se llama el compañero Pokémon más conocido de Ash?","Pikachu",["Charmander","Squirtle","Eevee"]],
+["¿Qué tipo es Pikachu?","Eléctrico",["Agua","Fuego","Planta"]],
+["¿En qué evoluciona Charmander?","Charmeleon",["Bulbasaur","Wartortle","Pidgeotto"]],
+["¿Qué objeto se usa habitualmente para capturar Pokémon?","Poké Ball",["Death Note","Grimorio","Piedra filosofal"]],
+["¿Qué tipo es Squirtle?","Agua",["Fuego","Eléctrico","Roca"]],
+["¿Cuál es el Pokémon número 001 de la Pokédex nacional?","Bulbasaur",["Pikachu","Charmander","Mew"]],
+["¿En qué evoluciona Eevee con una Piedra Trueno?","Jolteon",["Vaporeon","Flareon","Umbreon"]],
+["¿Qué equipo intenta robar Pokémon en la serie clásica?","Equipo Rocket",["Akatsuki","Liga de Villanos","Brigada Fantasma"]],
+["¿Cómo se llama la entrenadora que viaja con Ash en parte de la serie original?","Misty",["Nami","Nobara","Noelle"]],
+["¿Qué tipo es Charizard?","Fuego y Volador",["Agua y Hielo","Planta y Veneno","Eléctrico y Acero"]],
+["¿Qué Pokémon es conocido por dormir mucho?","Snorlax",["Pikachu","Mewtwo","Scyther"]],
+["¿Qué criatura legendaria está asociada con los mares?","Lugia",["Moltres","Entei","Rayquaza"]],
+["¿Qué hace un entrenador Pokémon?","Entrena Pokémon y participa en combates",["Caza titanes","Realiza alquimia humana","Escribe nombres en un cuaderno"]],
+["¿Qué tipo es Bulbasaur?","Planta y Veneno",["Fuego y Volador","Agua y Roca","Eléctrico y Acero"]],
+["¿Qué organización oficial celebra combates entre entrenadores?","La Liga Pokémon",["El Cuerpo de Exploración","La Marina","Los Toros Negros"]]
+],
+dragonball:[
+["¿Cómo se llama el protagonista principal?","Son Goku",["Vegeta","Piccolo","Gohan"]],
+["¿Qué objeto reúne siete esferas mágicas?","Las Esferas del Dragón",["Las Piedras Filosofales","Los dedos de Sukuna","Los grimorios"]],
+["¿Quién es el príncipe de los saiyajin?","Vegeta",["Krillin","Yamcha","Trunks del futuro"]],
+["¿Cómo se llama la transformación de cabello dorado más conocida de Goku?","Super Saiyajin",["Modo Sabio","Bankai","Dominio Infinito"]],
+["¿Quién es el hijo mayor de Goku?","Gohan",["Goten","Trunks","Bardock"]],
+["¿Qué técnica grita Goku al lanzar energía?","Kamehameha",["Rasengan","Getsuga Tensho","Black Flash"]],
+["¿Cómo se llama el mejor amigo humano de Goku?","Krillin",["Freezer","Cell","Raditz"]],
+["¿Quién es el creador de Dragon Ball?","Akira Toriyama",["Masashi Kishimoto","Eiichiro Oda","Hiro Mashima"]],
+["¿Qué raza es Goku?","Saiyajin",["Namekiano","Androide","Humano artificial"]],
+["¿Quién destruye el planeta Vegeta en la historia clásica?","Freezer",["Cell","Majin Buu","Raditz"]],
+["¿Cómo se llama el maestro anciano de Goku?","Maestro Roshi",["Maestro Jiraiya","Urahara","Yami"]],
+["¿Qué personaje verde pertenece a los namekianos?","Piccolo",["Krillin","Yamcha","Android 18"]],
+["¿Quién es el rival de Goku que se vuelve aliado?","Vegeta",["Pilaf","Oolong","Mr. Satan"]],
+["¿Qué se necesita para invocar a Shenlong?","Reunir las siete Esferas del Dragón",["Reunir siete grimorios","Vencer a siete titanes","Escribir siete nombres"]],
+["¿Qué género predomina en Dragon Ball?","Acción y artes marciales",["Cocina competitiva","Drama médico","Investigación policial"]]
+],
+foodwars:[
+["¿Cómo se llama el protagonista de Food Wars!?","Soma Yukihira",["Shiki Granbell","Asta","Denji"]],
+["¿Qué tipo de historia es Food Wars!?","Competición culinaria",["Aventura espacial","Caza de titanes","Misterio sobrenatural"]],
+["¿Cómo se llama la escuela de cocina principal?","Academia Totsuki",["Academia U.A.","Escuela de Tokio","Academia Clover"]],
+["¿Qué restaurante familiar ayuda a Soma a aprender a cocinar?","El restaurante Yukihira",["Anteiku","Baratie","Ichiraku"]],
+["¿Qué suele hacer Soma para mejorar sus platos?","Experimentar con recetas",["Usar alquimia humana","Luchar contra maldiciones","Capturar pokémon"]],
+["¿Quién es una compañera de Soma conocida como la lengua divina?","Erina Nakiri",["Mikasa Ackerman","Rukia Kuchiki","Misa Amane"]],
+["¿Qué tipo de duelos culinarios aparecen en la serie?","Shokugeki",["Bankai","Nen","Ether Gear"]],
+["¿Quién es el padre de Soma?","Joichiro Yukihira",["Satoru Gojo","Shanks","All Might"]],
+["¿Qué habilidad es importante para un estudiante de Totsuki?","Técnica y creatividad culinaria",["Controlar titanes","Invocar maldiciones","Usar grimorios mágicos"]],
+["¿Qué suele decidir un Shokugeki?","Una competencia de cocina",["Un duelo de piratas","Una carrera ninja","Una batalla espacial"]],
+["¿Qué ingrediente se utiliza para cocinar?","Ingredientes alimentarios",["Esferas del Dragón","Dedos malditos","Cuadernos sobrenaturales"]],
+["¿Qué busca Soma con sus desafíos?","Mejorar como cocinero",["Ser el Rey Pirata","Ser el Hokage","Ser el Rey Mago"]],
+["¿Qué género combina la serie?","Comedia y cocina",["Terror y zombis","Ciencia ficción militar","Drama judicial"]],
+["¿Qué organización escolar tiene gran influencia en Totsuki?","El Consejo de los Diez",["Los Siete Pecados","Los Doce Kizuki","La Marina"]],
+["¿Qué distingue a los platos exitosos de Soma?","Creatividad y sabor",["Poderes sobrenaturales reales","Magia de titanes","Tecnología espacial"]]
+],
+konosuba:[
+["¿Cómo se llama el protagonista de KonoSuba?","Kazuma Satou",["Kirito","Shiki Granbell","Yuji Itadori"]],
+["¿Qué diosa acompaña a Kazuma?","Aqua",["Eris","Hestia","Athena"]],
+["¿Qué magia utiliza Megumin?","Explosión",["Agua curativa","Control de sombras","Alquimia"]],
+["¿Cómo se llama la caballera masoquista del grupo?","Darkness",["Yunyun","Wiz","Sylphina"]],
+["¿Qué género destaca en KonoSuba?","Comedia y fantasía",["Terror realista","Drama médico","Documental histórico"]],
+["¿Qué hace Megumin después de lanzar su hechizo más poderoso?","Queda sin energía y no puede moverse bien",["Se transforma en dragón","Se vuelve invisible","Cambia de mundo automáticamente"]],
+["¿Qué clase de mundo explora el grupo?","Un mundo de fantasía",["Una ciudad futurista realista","Una escuela de cocina","Un planeta de titanes"]],
+["¿Cómo consigue Kazuma dinero en el nuevo mundo?","Aceptando trabajos y misiones",["Trabajando como Hokage","Vendiendo grimorios prohibidos","Cazando pokémon legendarios"]],
+["¿Qué diosa es conocida por sus habilidades curativas?","Aqua",["Megumin","Darkness","Yunyun"]],
+["¿Qué arma utiliza Darkness habitualmente?","Una espada",["Una motosierra","Un cuaderno","Un arco tecnológico"]],
+["¿Quién es una rival y amiga de Megumin?","Yunyun",["Mikasa","Makima","Nami"]],
+["¿Qué suele ocurrir con los planes de Kazuma?","Acaban en situaciones caóticas",["Siempre salen perfectos","Nunca implican a sus amigos","Terminan en una competencia culinaria"]],
+["¿Qué recurso es esencial para la magia de Megumin?","Poder mágico",["Combustible de nave","Esferas del Dragón","Sangre de titán"]],
+["¿Qué tipo de grupo forma Kazuma?","Un grupo de aventureros",["Un escuadrón policial real","Una banda de piratas espaciales","Un equipo profesional de cocina"]],
+["¿Qué hace especial a KonoSuba frente a muchas fantasías?","Parodia los clichés del género",["Es un documental","No tiene humor","Trata únicamente de deportes"]]
+],
+naruto:[
+["¿Cuál es el sueño de Naruto?","Convertirse en Hokage",["Ser Rey Pirata","Ser Rey Mago","Ser alquimista estatal"]],
+["¿Qué criatura está sellada dentro de Naruto?","Kurama",["Shukaku únicamente","Pikachu","Pochita"]],
+["¿Cómo se llama el equipo de Naruto, Sakura y Sasuke?","Equipo 7",["Equipo 10","Equipo Guy","Equipo 8"]],
+["¿Quién es el maestro del Equipo 7 al principio?","Kakashi Hatake",["Jiraiya","Iruka Umino","Orochimaru"]],
+["¿Qué técnica crea una esfera de chakra giratoria?","Rasengan",["Chidori","Kamehameha","Getsuga Tensho"]],
+["¿Quién es el rival de Naruto durante gran parte de la historia?","Sasuke Uchiha",["Shikamaru Nara","Kiba Inuzuka","Choji Akimichi"]],
+["¿Qué clan es famoso por el Sharingan?","Uchiha",["Hyuga","Nara","Akimichi"]],
+["¿Quién es el maestro conocido como el Sabio Pervertido?","Jiraiya",["Kakashi","Guy","Minato"]],
+["¿Qué organización viste capas negras con nubes rojas?","Akatsuki",["Los Homúnculos","Los Toros Negros","El Equipo Rocket"]],
+["¿Cómo se llama la aldea de Naruto?","Konohagakure",["Sunagakure","Amegakure","Kirigakure"]],
+["¿Qué técnica usa Naruto para crear copias?","Clones de sombra",["Bankai","Dominio Infinito","Alchemy Seal"]],
+["¿Quién es el padre de Naruto?","Minato Namikaze",["Hiruzen Sarutobi","Jiraiya","Kakashi Hatake"]],
+["¿Qué habilidad tiene Hinata relacionada con su clan?","Byakugan",["Sharingan","Rinnegan","Geass"]],
+["¿Qué rango desea alcanzar Naruto?","Hokage",["Capitán de la Marina","Rey Pirata","Rey Demonio"]],
+["¿Qué energía utiliza un ninja para ejecutar técnicas?","Chakra",["Nen","Ether Gear","Energía maldita"]]
+],
+blackclover:[
+["¿Cómo se llama el protagonista de Black Clover?","Asta",["Yuno","Yami","Luck"]],
+["¿Qué característica inusual tiene Asta al principio?","No tiene magia",["No puede hablar","No puede correr","No puede usar espadas"]],
+["¿Quién es el rival de Asta desde la infancia?","Yuno",["Magna","Finral","Gauche"]],
+["¿Cómo se llama el escuadrón de Asta?","Toros Negros",["Leones Carmesí","Águilas Plateadas","Rosas Azules"]],
+["¿Qué desea convertirse Asta?","Rey Mago",["Hokage","Rey Pirata","Alquimista estatal"]],
+["¿Qué objeto recibe Asta para usar anti-magia?","Un grimorio de cinco hojas",["Una Death Note","Una Poké Ball","Una piedra filosofal"]],
+["¿Quién es el capitán de los Toros Negros?","Yami Sukehiro",["Fuegoleon Vermillion","Nozel Silva","William Vangeance"]],
+["¿Qué tipo de magia utiliza Noelle Silva?","Magia de agua",["Magia de fuego","Magia de arena","Magia de sombras"]],
+["¿Qué es Yuno para Asta?","Su amigo y rival",["Su padre","Su maestro de cocina","Su enemigo de otra dimensión"]],
+["¿Qué objeto usan los magos para realizar magia?","Grimorios",["Zanpakutō","Cuadernos de muerte","Poké Balls"]],
+["¿Qué fuerza puede anular la magia?","Anti-magia",["Nen de emisión","Sunshine","One For All"]],
+["¿Quién es una integrante de los Toros Negros conocida por su magia espacial?","Finral Roulacase",["Levi Ackerman","Soma Yukihira","Kento Nanami"]],
+["¿Qué reino es el escenario principal?","Reino del Trébol",["Reino de Liones","Amestris","Wano"]],
+["¿Qué género combina la serie?","Acción y fantasía",["Cocina y deportes","Drama médico","Ciencia ficción realista"]],
+["¿Qué representa el sueño de Asta?","Superar sus límites y convertirse en Rey Mago",["Encontrar la Death Note","Ser el mejor chef","Convertirse en pirata"]]
+],
+plunderer:[
+["¿Cómo se llama la protagonista que busca al legendario As?","Hina",["Licht","Mikasa","Rebecca"]],
+["¿Cómo se llama el protagonista masculino?","Licht Bach",["Asta","Kazuma","Ken Kaneki"]],
+["¿Qué concepto numérico es importante en Plunderer?","El conteo",["El chakra","La alquimia","La energía maldita"]],
+["¿Qué puede determinar el conteo de una persona?","Aspectos de su vida o habilidades",["Su comida favorita únicamente","Su color de cabello solamente","Su lugar de nacimiento siempre"]],
+["¿Qué género tiene Plunderer?","Acción y fantasía",["Cocina competitiva","Deportes escolares","Documental natural"]],
+["¿Qué busca Hina al comienzo de la historia?","Encontrar al legendario As",["Ser Hokage","Encontrar a Mother","Convertirse en chef"]],
+["¿Qué tipo de mundo presenta la serie?","Un mundo donde los números tienen gran importancia",["Un mundo sin números","Un mundo de cocina profesional","Una ciudad exclusivamente submarina"]],
+["¿Qué caracteriza al sistema de poder de la serie?","El conteo de cada persona",["Las Poké Balls","Los grimorios de cinco hojas","Las murallas de piedra"]],
+["¿Quién es una figura importante vinculada al pasado de Licht?","Los ases legendarios",["Los Siete Pecados Capitales","Los Homúnculos de Amestris","Los cazadores de ghouls"]],
+["¿Qué busca la historia explorar además de la acción?","Las consecuencias de las reglas de su sociedad",["Solo recetas culinarias","Solo partidos deportivos","Solo viajes espaciales"]],
+["¿Qué es Licht en la historia?","Un personaje con un pasado misterioso",["El padre de Naruto","Un capitán pirata","Un profesor de cocina"]],
+["¿Qué tipo de habilidad puede influir en el combate?","El valor del conteo",["Una receta de curry","Una Poké Ball","Una técnica de alquimia culinaria"]],
+["¿Qué género de aventura aparece en Plunderer?","Fantasía distópica",["Comedia escolar realista","Documental de cocina","Drama médico"]],
+["¿Qué elemento es recurrente en la serie?","Los números y su significado",["Las Esferas del Dragón","Los cuadernos sobrenaturales","Los deportes de invierno"]],
+["¿Qué impulsa a los personajes a avanzar?","Descubrir la verdad de su mundo",["Encontrar un restaurante famoso","Ganar la Liga Pokémon","Ser el Rey Pirata"]]
+],
+tokyo:[
+["¿Cómo se llama el protagonista de Tokyo Revengers?","Takemichi Hanagaki",["Manjiro Sano","Ken Kaneki","Yuji Itadori"]],
+["¿Cómo se conoce a Manjiro Sano?","Mikey",["Draken","Baji","Chifuyu"]],
+["¿Quién es el mejor amigo de Mikey y vicepresidente de Toman?","Draken",["Takemichi","Naoto","Kisaki"]],
+["¿Qué capacidad extraordinaria tiene Takemichi?","Viajar en el tiempo",["Controlar el fuego","Leer pensamientos","Transformarse en titán"]],
+["¿Cómo se llama la pandilla principal al inicio?","Tokyo Manji Gang (Toman)",["Akatsuki","Equipo Rocket","Brigada Fantasma"]],
+["¿Quién es la novia de Takemichi?","Hinata Tachibana",["Emma Sano","Yuzuha Shiba","Senju Kawaragi"]],
+["¿Cómo se llama el hermano menor de Hinata?","Naoto Tachibana",["Draken","Baji","Mitsuya"]],
+["¿Qué personaje suele llamarse Draken?","Ken Ryuguji",["Manjiro Sano","Takemichi Hanagaki","Kazutora Hanemiya"]],
+["¿Qué género combina la serie?","Drama y pandillas con viajes temporales",["Cocina y fantasía","Ciencia ficción espacial","Deportes escolares"]],
+["¿Qué intenta cambiar Takemichi con sus viajes?","Un futuro trágico",["El resultado de un torneo culinario","La historia de los titanes","El origen de los Pokémon"]],
+["¿Qué personaje está vinculado a muchos de los conflictos de Toman?","Tetta Kisaki",["Soma Yukihira","Yami Sukehiro","Rukia Kuchiki"]],
+["¿Qué valor aparece con frecuencia entre los personajes?","La lealtad a sus amigos",["La alquimia humana","La caza de demonios","La cocina profesional"]],
+["¿Qué suele desencadenar los viajes temporales de Takemichi?","Un contacto relacionado con Naoto",["Una Poké Ball","Un grimorio","Un plato de cocina"]],
+["¿Qué tipo de ropa suelen llevar los miembros de las pandillas?","Uniformes de pandilla",["Uniformes de astronauta","Túnicas de alquimista","Trajes de chef"]],
+["¿Cuál es uno de los objetivos centrales de Takemichi?","Salvar a Hinata y a sus amigos",["Encontrar el One Piece","Ser el Rey Mago","Encontrar a Mother"]]
+],
+fma:[
+["¿Cómo se llaman los hermanos protagonistas?","Edward y Alphonse Elric",["Eren y Zeke Yeager","Yuji y Megumi","Asta y Yuno"]],
+["¿Qué arte domina Edward?","Alquimia",["Nen","Ether Gear","Respiración del Agua"]],
+["¿Qué perdió Edward durante el intento de transmutación humana?","Una pierna y luego un brazo",["La vista únicamente","La memoria completa","Su corazón por una maldición"]],
+["¿Qué perdió Alphonse en el intento de transmutación humana?","Su cuerpo físico",["Su voz","Su sombra","Su capacidad de aprender"]],
+["¿Qué ley fundamental rige la alquimia en la serie?","Intercambio equivalente",["El chakra infinito","La ley del Rey Pirata","La regla de las siete Poké Balls"]],
+["¿Cómo llaman a Edward por su prótesis?","El Alquimista de Acero",["El Rey Mago","El Segador del CCG","El Titán Colosal"]],
+["¿Qué objeto buscan los hermanos?","La Piedra Filosofal",["La Death Note","El One Piece","El grimorio de cinco hojas"]],
+["¿Cómo se llama el país donde ocurre la historia?","Amestris",["Liones","Wano","Clover"]],
+["¿Qué rango militar tiene Edward?","Alquimista Estatal",["Capitán de la Marina","Hokage","Cazador de rango S"]],
+["¿Qué es Alphonse después del accidente?","Un alma ligada a una armadura",["Un androide con forma de gato","Un titán inteligente","Un ghoul de un ojo"]],
+["¿Quién es el padre de Edward y Alphonse?","Van Hohenheim",["Roy Mustang","Maes Hughes","King Bradley"]],
+["¿Qué elemento utiliza Roy Mustang en combate?","Fuego",["Agua","Hielo","Electricidad"]],
+["¿Qué organización investiga a los alquimistas estatales?","El ejército de Amestris",["La Marina de One Piece","La Liga Pokémon","El Cuerpo de Exploración"]],
+["¿Qué tema moral aparece en la historia?","El precio de intentar desafiar las leyes de la naturaleza",["Ganar torneos de cocina","Ser un entrenador Pokémon","Encontrar un tesoro pirata"]],
+["¿Quién es el autor del manga original?","Hiromu Arakawa",["Eiichiro Oda","Masashi Kishimoto","Tite Kubo"]]
+],
+onepiece:[
+["¿Cómo se llama el protagonista de One Piece?","Monkey D. Luffy",["Roronoa Zoro","Sanji","Trafalgar Law"]],
+["¿Qué quiere encontrar Luffy?","El One Piece",["La Piedra Filosofal","La Death Note","El Santo Grial"]],
+["¿Qué título desea conseguir Luffy?","Rey de los Piratas",["Hokage","Rey Mago","Alquimista Estatal"]],
+["¿Cómo se llama el espadachín de la tripulación?","Roronoa Zoro",["Usopp","Franky","Brook"]],
+["¿Quién es la navegante de los Sombrero de Paja?","Nami",["Robin","Vivi","Perona"]],
+["¿Qué fruta comió Luffy?","Gomu Gomu no Mi",["Mera Mera no Mi","Hie Hie no Mi","Ope Ope no Mi"]],
+["¿Cómo se llama el cocinero de la tripulación?","Sanji",["Jinbe","Franky","Chopper"]],
+["¿Qué animal es Tony Tony Chopper?","Un reno",["Un perro","Un gato","Un oso"]],
+["¿Quién es el médico de la tripulación?","Tony Tony Chopper",["Nami","Brook","Usopp"]],
+["¿Cómo se llama el barco que sucede al Going Merry?","Thousand Sunny",["Red Force","Polar Tang","Moby Dick"]],
+["¿Qué sueño tiene Zoro?","Ser el mejor espadachín del mundo",["Ser el mejor chef","Encontrar a Mother","Convertirse en Hokage"]],
+["¿Quién es el arqueólogo de los Sombrero de Paja?","Nico Robin",["Nami","Vivi","Carrot"]],
+["¿Qué organización gobierna gran parte del mundo de One Piece?","Gobierno Mundial",["Cuerpo de Exploración","Akatsuki","Los Homúnculos"]],
+["¿Qué especie es Jinbe?","Hombre-pez",["Gigante","Mink zorro","Cyborg humano"]],
+["¿Qué género combina la serie?","Aventura y piratas",["Cocina competitiva","Horror escolar","Drama médico"]]
+],
+demonslayer:[
+["¿Cómo se llama el protagonista de Demon Slayer?","Tanjiro Kamado",["Zenitsu Agatsuma","Inosuke Hashibira","Giyu Tomioka"]],
+["¿Cómo se llama la hermana de Tanjiro?","Nezuko Kamado",["Kanao Tsuyuri","Shinobu Kocho","Mitsuri Kanroji"]],
+["¿Qué organización combate a los demonios?","Cuerpo de Exterminio de Demonios",["Cuerpo de Exploración","Akatsuki","Seguridad Pública"]],
+["¿Qué respiración utiliza Tanjiro al principio de su entrenamiento?","Respiración del Agua",["Respiración del Viento","Respiración de la Serpiente","Respiración de la Bestia"]],
+["¿Quién entrena a Tanjiro al principio?","Sakonji Urokodaki",["Kyojuro Rengoku","Tengen Uzui","Muzan Kibutsuji"]],
+["¿Qué característica tiene Nezuko tras convertirse en demonio?","Puede reducir su tamaño",["Puede usar alquimia","Puede convertirse en titán","Puede escribir en la Death Note"]],
+["¿Quién es el demonio principal de la historia?","Muzan Kibutsuji",["Akaza","Enmu","Rui"]],
+["¿Qué utiliza Zenitsu para luchar cuando está inconsciente?","Respiración del Rayo",["Respiración de la Niebla","Respiración de la Flor","Respiración del Amor"]],
+["¿Qué arma utilizan los cazadores de demonios?","Espadas Nichirin",["Zanpakutō de shinigami","Armas de alquimia","Poké Balls"]],
+["¿Quién es conocido como el Pilar de la Llama?","Kyojuro Rengoku",["Giyu Tomioka","Muichiro Tokito","Sanemi Shinazugawa"]],
+["¿Cómo se llama el chico que lleva una máscara de jabalí?","Inosuke Hashibira",["Genya Shinazugawa","Yushiro","Murata"]],
+["¿Qué debilidad clásica tienen los demonios de la serie?","La luz del sol",["El agua salada","La electricidad únicamente","La plata siempre"]],
+["¿Quién es el Pilar del Agua?","Giyu Tomioka",["Tengen Uzui","Obanai Iguro","Gyomei Himejima"]],
+["¿Qué familia protagoniza la historia?","La familia Kamado",["La familia Elric","La familia Uchiha","La familia Forger"]],
+["¿Qué género define mejor Demon Slayer?","Acción y fantasía oscura",["Cocina y romance","Deportes y ciencia","Comedia política"]]
+],
+deathnote:[
+["¿Cómo se llama el protagonista que encuentra el cuaderno?","Light Yagami",["L Lawliet","Near","Mello"]],
+["¿Qué ocurre cuando se escribe un nombre en la Death Note?","La persona puede morir",["La persona obtiene poderes mágicos","La persona se vuelve invisible","La persona viaja en el tiempo"]],
+["¿Cómo se llama el shinigami que deja caer el cuaderno?","Ryuk",["Rem","Gelus","Sidoh"]],
+["¿Qué detective intenta atrapar a Light?","L",["Near","Matsuda","Soichiro Yagami"]],
+["¿Qué necesita saber el usuario para matar con el cuaderno?","El nombre y el rostro de la persona",["Solo su color favorito","Su dirección exacta siempre","Su número de teléfono únicamente"]],
+["¿Cómo se llama la idol que también posee una Death Note?","Misa Amane",["Kiyomi Takada","Naomi Misora","Sayu Yagami"]],
+["¿Qué título recibe Light en sus acciones como Kira?","Kira",["Luffy","Hokage","Alquimista de Acero"]],
+["¿Qué es Ryuk?","Un shinigami",["Un detective humano","Un ghoul","Un alquimista"]],
+["¿Qué desea crear Light mediante el cuaderno?","Un mundo sin criminales según su ideal",["Un nuevo reino pirata","Una academia de cocina","Una aldea ninja"]],
+["¿Qué tipo de historia es Death Note?","Suspenso psicológico",["Comedia culinaria","Deportes escolares","Aventura espacial"]],
+["¿Qué hace especial a L como investigador?","Su capacidad deductiva",["Su magia de fuego","Su poder de titán","Su control de Pokémon"]],
+["¿Qué alimento le gusta mucho a Ryuk?","Manzanas",["Patatas fritas","Curry picante","Pescado crudo"]],
+["¿Qué regla puede extender la vida de un shinigami en circunstancias específicas?","Escribir el nombre de alguien para salvar a una persona por amor",["Comer una manzana","Usar alquimia humana","Ganar una competencia"]],
+["¿Quién es el padre de Light?","Soichiro Yagami",["L Lawliet","Teru Mikami","Touta Matsuda"]],
+["¿Qué elemento central explora la serie?","La justicia y el abuso del poder",["La cocina profesional","La piratería espacial","Los torneos deportivos"]]
+],
+spyfamily:[
+["¿Cómo se llama el espía conocido como Twilight?","Loid Forger",["Yor Briar","Franky Franklin","Damian Desmond"]],
+["¿Qué habilidad secreta tiene Anya?","Leer pensamientos",["Controlar el fuego","Viajar en el tiempo","Transformarse en perro"]],
+["¿Cuál es la profesión secreta de Yor?","Asesina",["Espía","Detective","Cocinera profesional"]],
+["¿Cómo se llama el perro de la familia Forger?","Bond",["Pochita","Hawk","Happy"]],
+["¿Qué nombre usa Loid en su identidad familiar?","Loid Forger",["Loid Briar","Donovan Forger","Henry Henderson"]],
+["¿Por qué Loid crea una familia?","Para cumplir una misión de espionaje",["Para encontrar el One Piece","Para convertirse en Hokage","Para participar en un concurso culinario"]],
+["¿Qué escuela frecuenta Anya?","Academia Eden",["Academia U.A.","Academia Totsuki","Escuela de Tokio"]],
+["¿Qué puede ver Bond en algunas de sus visiones?","Posibles acontecimientos futuros",["Los pensamientos de todos","El futuro exacto sin excepción","La ubicación de todas las Death Notes"]],
+["¿Qué le gusta comer a Anya?","Cacahuetes",["Manzanas","Patatas fritas","Ramen exclusivamente"]],
+["¿Qué relación tiene Yuri Briar con Yor?","Es su hermano menor",["Es su padre","Es su hijo","Es su compañero de espionaje"]],
+["¿Qué organización emplea a Loid?","WISE",["Akatsuki","Marina","Cuerpo de Exploración"]],
+["¿Qué habilidad tiene Yor además de su vida normal?","Es una asesina muy hábil",["Es una hechicera de maldiciones","Es una capitana pirata","Es una alquimista estatal"]],
+["¿Qué tono mezcla la serie?","Comedia, espionaje y vida familiar",["Terror de supervivencia únicamente","Cocina competitiva","Documental militar"]],
+["¿Cuál es el nombre en clave de Loid?","Twilight",["Thorn Princess","Nightfall","Handler"]],
+["¿Qué hace Anya para intentar ayudar a su familia?","Usa lo que sabe al leer pensamientos",["Escribe nombres en un cuaderno","Caza titanes","Invoca dragones"]]
+],
+hxh:[
+["¿Cómo se llama el protagonista de Hunter x Hunter?","Gon Freecss",["Killua Zoldyck","Kurapika","Leorio"]],
+["¿Qué busca Gon al inicio de la historia?","Encontrar a su padre",["Ser Rey Pirata","Encontrar la Piedra Filosofal","Convertirse en Hokage"]],
+["¿Cómo se llama el mejor amigo de Gon?","Killua Zoldyck",["Hisoka","Chrollo","Illumi"]],
+["¿Qué energía utilizan los cazadores en combate avanzado?","Nen",["Chakra","Ether Gear","Energía maldita"]],
+["¿Qué arma o estilo caracteriza a Kurapika en combate?","Cadenas",["Una motosierra","Un grimorio","Una espada Nichirin"]],
+["¿Qué profesión intenta conseguir Gon?","Cazador",["Alquimista estatal","Chef de Totsuki","Shinigami"]],
+["¿De qué familia procede Killua?","Zoldyck",["Uchiha","Elric","Forger"]],
+["¿Qué personaje es un luchador impredecible y peligroso?","Hisoka",["Maes Hughes","Kento Nanami","Soma Yukihira"]],
+["¿Qué organización criminal aparece en la serie?","Brigada Fantasma",["Akatsuki únicamente","Equipo Rocket","Los Homúnculos"]],
+["¿Qué busca Kurapika vengar?","La masacre de su clan",["La destrucción de su barco","La pérdida de su restaurante","La derrota de su equipo escolar"]],
+["¿Quién es el padre de Gon?","Ging Freecss",["Silva Zoldyck","Netero","Leorio"]],
+["¿Qué tipo de examen realizan los aspirantes al principio?","Examen de Cazador",["Examen de Hokage","Shokugeki","Examen de alquimia estatal"]],
+["¿Qué personaje es conocido por sus habilidades médicas y su ambición de ser médico?","Leorio",["Hisoka","Feitan","Phinks"]],
+["¿Qué tipo de mundo presenta Hunter x Hunter?","Aventura con criaturas, pruebas y cazadores",["Solo una escuela de cocina","Una historia de piratas espaciales","Un drama médico realista"]],
+["¿Qué característica tiene el Nen?","Permite desarrollar habilidades según el usuario",["Es una libreta sobrenatural","Es una espada mágica única","Es una forma de cocinar"]]
+],
+bleach:[
+["¿Cómo se llama el protagonista de Bleach?","Ichigo Kurosaki",["Uryu Ishida","Renji Abarai","Kisuke Urahara"]],
+["¿Qué es Rukia Kuchiki?","Una shinigami",["Una titán","Una alquimista","Una ghoul"]],
+["¿Cómo se llama la espada de un shinigami?","Zanpakutō",["Nichirin","Grimorio","Poké Ball"]],
+["¿Qué grito acompaña una técnica famosa de Ichigo?","Getsuga Tenshō",["Rasengan","Kamehameha","Black Flash"]],
+["¿Qué organización protege el equilibrio de almas?","Gotei 13",["Akatsuki","WISE","Toros Negros"]],
+["¿Cómo se llaman los seres espirituales que devoran almas?","Hollows",["Homúnculos","Titanes","Pokémon"]],
+["¿Quién es el compañero de Ichigo experto en Quincy?","Uryu Ishida",["Renji Abarai","Kon","Yasutora Sado"]],
+["¿Quién es el capitán de la décima división conocido por su cabello blanco?","Toshiro Hitsugaya",["Byakuya Kuchiki","Kenpachi Zaraki","Sajin Komamura"]],
+["¿Qué es un Bankai?","Una liberación avanzada de una Zanpakutō",["Una técnica de cocina","Un rango de cazador","Una clase de grimorio"]],
+["¿Quién es el padre de Ichigo?","Isshin Kurosaki",["Kisuke Urahara","Jushiro Ukitake","Genryusai Yamamoto"]],
+["¿Cómo se llama la hermana de Rukia?","Hisana Kuchiki",["Orihime Inoue","Rangiku Matsumoto","Yoruichi Shihouin"]],
+["¿Qué habilidad tiene Orihime?","Rechazar fenómenos mediante sus poderes",["Controlar titanes","Leer Death Notes","Usar anti-magia"]],
+["¿Quién es conocido como el capitán de la undécima división?","Kenpachi Zaraki",["Sosuke Aizen","Toshiro Hitsugaya","Shinji Hirako"]],
+["¿Qué lugar es el hogar de los shinigami?","Sociedad de Almas",["Amestris","Liones","Clover"]],
+["¿Qué género predomina en Bleach?","Acción sobrenatural",["Cocina competitiva","Deportes escolares","Comedia romántica"]]
+],
+sololeveling:[
+["¿Cómo se llama el protagonista de Solo Leveling?","Sung Jinwoo",["Sung Jinah","Yoo Jinho","Go Gunhee"]],
+["¿Qué rango tenía Jinwoo al comienzo?","Rango E",["Rango S","Rango A","Rango Nacional"]],
+["¿Qué capacidad especial obtiene Jinwoo?","Subir de nivel como un jugador",["Leer Death Notes","Crear grimorios","Controlar titanes"]],
+["¿Cómo se llama la habilidad que le permite formar un ejército de sombras?","Extracción de sombras",["Respiración del Rayo","Alquimia estatal","Dominio Infinito"]],
+["¿Qué tipo de criaturas aparecen en portales?","Monstruos",["Solo animales normales","Piratas","Chef profesionales"]],
+["¿Qué profesión tiene Jinwoo al inicio?","Cazador",["Chef","Espía","Ninja"]],
+["¿Quién es Yoo Jinho?","Un cazador que se vuelve aliado de Jinwoo",["El padre de Jinwoo","El principal antagonista desde el inicio","Un profesor de cocina"]],
+["¿Qué significa que un portal se abra en el mundo?","Puede aparecer una mazmorra peligrosa",["Empieza un concurso culinario","Se celebra un examen ninja","Todos se vuelven invisibles"]],
+["¿Qué personaje es la hermana de Jinwoo?","Sung Jinah",["Cha Hae-In","Esil Radiru","Lee Joohee"]],
+["¿Quién es una cazadora de rango S que se acerca a Jinwoo?","Cha Hae-In",["Mikasa Ackerman","Yor Forger","Noelle Silva"]],
+["¿Qué tipo de historia es Solo Leveling?","Acción y fantasía con progresión de poder",["Cocina escolar","Drama histórico realista","Deportes de equipo"]],
+["¿Qué interfaz ve Jinwoo tras despertar su habilidad?","Una interfaz similar a un videojuego",["Una Death Note","Una Pokédex","Un grimorio de cinco hojas"]],
+["¿Qué hace especial a Jinwoo en comparación con otros cazadores?","Puede fortalecerse continuamente mediante niveles",["No puede combatir","Solo sabe cocinar","No puede entrar en mazmorras"]],
+["¿Qué amenaza enfrentan los cazadores?","Monstruos de mazmorras",["Únicamente exámenes escolares","Piratas de mar abierto","Pandillas urbanas"]],
+["¿Qué recurso utiliza Jinwoo para formar su ejército?","Sombras de enemigos derrotados",["Poké Balls","Clones de sombra ninja","Piedras filosofales"]]
+],
+chainsaw:[
+["¿Cómo se llama el protagonista de Chainsaw Man?","Denji",["Aki Hayakawa","Kishibe","Beam"]],
+["¿Cómo se llama el demonio-perro que acompaña a Denji?","Pochita",["Kon","Beam","Meowy"]],
+["¿Qué parte del cuerpo de Denji se transforma en motosierra?","La cabeza y los brazos",["Solo las piernas","La espalda","Los ojos"]],
+["¿Quién recluta a Denji para Seguridad Pública?","Makima",["Power","Himeno","Kobeni"]],
+["¿Qué es Power?","Una demonio de sangre",["Una cazadora humana sin poderes","Una shinigami","Una alquimista"]],
+["¿Qué contrato tiene Aki con el Demonio Zorro?","Puede invocarlo diciendo 'Kon'",["Puede controlar el tiempo","Puede resucitar a cualquiera","Puede crear comida"]],
+["¿Cómo se llama el demonio que se vincula con Aki por un contrato?","Demonio del Futuro",["Demonio de la Cocina","Demonio del Agua","Demonio de las Sombras"]],
+["¿Qué temen los demonios según la lógica de la serie?","Los conceptos que generan miedo",["Solo los animales","Las recetas de cocina","Los juegos de cartas"]],
+["¿Qué división integra Denji al principio?","Seguridad Pública",["Cuerpo de Exploración","Gotei 13","Toros Negros"]],
+["¿Qué mascota busca Power recuperar?","Meowy",["Pochita","Bond","Emul"]],
+["¿Qué personaje trabaja con Denji y usa una espada en combate?","Aki Hayakawa",["Kishibe","Soma Yukihira","Ging Freecss"]],
+["¿Qué relación especial tiene Pochita con Denji?","Se convierte en su corazón",["Es su padre","Es su profesor","Es su rival escolar"]],
+["¿Qué personaje es un cazador veterano y mentor?","Kishibe",["Soma Yukihira","Ging Freecss","Yami Sukehiro"]],
+["¿Qué género combina la serie?","Acción, horror y humor negro",["Deportes y cocina","Solo romance","Documental de naturaleza"]],
+["¿Qué suele motivar a Denji al inicio?","Deseos sencillos y una vida mejor",["Ser Rey Pirata","Encontrar al Hokage","Ser el mejor alquimista"]]
+],
+mha:[
+["¿Cuál es el nombre real de Deku?","Izuku Midoriya",["Katsuki Bakugo","Shoto Todoroki","Tenya Iida"]],
+["¿Qué héroe le transmite One For All a Izuku?","All Might",["Endeavor","Hawks","Best Jeanist"]],
+["¿Cómo se llama la academia de héroes?","U.A.",["Totsuki","Eden","Técnica de Tokio"]],
+["¿Qué don usa Katsuki Bakugo?","Explosión",["Hielo y fuego","Cinta adhesiva","Gravedad cero"]],
+["¿Qué don tiene Ochaco Uraraka?","Gravedad Cero",["Copia","Endurecimiento","Motor"]],
+["¿Quién es el padre de Shoto Todoroki?","Endeavor",["All Might","Present Mic","Hawks"]],
+["¿Qué hace el don de Shoto?","Usa hielo y fuego",["Se vuelve invisible","Controla plantas","Crea portales"]],
+["¿Quién es el profesor de la clase 1-A que usa una bufanda?","Shota Aizawa",["Hizashi Yamada","Nezu","Sir Nighteye"]],
+["¿Qué significa ser héroe profesional en la serie?","Usar dones para proteger a la sociedad",["Ser el líder de una pandilla","Cazar piratas","Investigar maldiciones"]],
+["¿Qué organización reúne a villanos bajo Shigaraki?","Liga de Villanos",["Akatsuki","Brigada Fantasma","Homúnculos"]],
+["¿Cuál es el nombre de héroe de Mirio Togata?","Lemillion",["Deku","Dynamight","Red Riot"]],
+["¿Qué don tiene Tsuyu Asui?","Rana",["Fuego infernal","Cinta","Duplicación"]],
+["¿Qué personaje puede endurecer su cuerpo?","Eijiro Kirishima",["Denki Kaminari","Minoru Mineta","Fumikage Tokoyami"]],
+["¿Qué don tiene Denki Kaminari?","Electricidad",["Agua","Gravedad","Control de arena"]],
+["¿Qué idea central explora My Hero Academia?","Ser héroe en una sociedad de dones",["La búsqueda de un tesoro pirata","El precio de la alquimia","La vida de cazadores en mazmorras"]]
+],
+tokyoghoul:[
+["¿Quién es el protagonista de Tokyo Ghoul?","Ken Kaneki",["Koutarou Amon","Renji Yomo","Nishiki Nishio"]],
+["¿Qué se convierte Kaneki tras un trasplante?","Un medio ghoul",["Un shinigami","Un titán","Un alquimista estatal"]],
+["¿Qué necesitan comer los ghouls para sobrevivir?","Carne humana",["Solo frutas","Piedras mágicas","Píldoras de energía"]],
+["¿Cómo se llama la cafetería que funciona como refugio?","Anteiku",["Totsuki","Axel","Edens Zero"]],
+["¿Qué arma biológica usan los ghouls en combate?","Kagune",["Zanpakutō","Grimorio","Nen"]],
+["¿Qué organización investiga y combate a los ghouls?","CCG",["WISE","Marina","Gotei 13"]],
+["¿Qué color suele tener el cabello de Kaneki después de un cambio importante?","Blanco",["Verde","Azul","Naranja"]],
+["¿Quién es una ghoul que trabaja en Anteiku y se acerca a Kaneki?","Touka Kirishima",["Rize Kamishiro","Akame","Mikasa Ackerman"]],
+["¿Qué ocurre con el ojo de Kaneki cuando usa su poder ghoul?","Se vuelve rojo y negro",["Se vuelve dorado","Desaparece por completo","Brilla azul como un Sharingan"]],
+["¿Qué apodo recibe el investigador Kishou Arima?","El Segador del CCG",["Rey Pirata","Rey Mago","Dios de la Destrucción"]],
+["¿Qué es Rize Kamishiro para la transformación de Kaneki?","La fuente de los órganos trasplantados",["Su hermana","Su maestra de escuela","La líder de Anteiku"]],
+["¿Qué tipo de máscara usa Kaneki en una etapa de la historia?","Una máscara que cubre un ojo y la boca",["Una máscara de zorro completa","Un casco de astronauta","Una máscara de cerdo"]],
+["¿Qué dilema vive Kaneki?","Su identidad entre humano y ghoul",["Elegir un escuadrón mágico","Convertirse en pirata","Entrar en un torneo culinario"]],
+["¿Qué género tiene Tokyo Ghoul?","Horror oscuro y acción sobrenatural",["Comedia de cocina","Deportes escolares","Aventura espacial"]],
+["¿Qué café se vuelve un lugar importante para ghouls pacíficos?","Anteiku",["Baratie","Ichiraku","Witch's Shop"]]
+]
+};
+
+const state = {
+  selected: new Set(),
+  level: "facil",
+  qty: 5,
+  questions: [],
+  index: 0,
+  correct: 0,
+  wrong: 0,
+  answered: false
+};
+
+const screens = ["selectScreen", "configScreen", "quizScreen", "resultScreen"];
+
+function shuffle(array) {
+  const copy = [...array];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
 }
 
-// ============= NARUTO — FÁCIL =============
-addQ("Naruto", "facil", "¿Cuál es el sueño de Naruto?", 
-    ["A) Ser Hokage", "B) Encontrar el tesoro", "C) Ser el más fuerte", "D) Salvar a Sakura"], 0);
-addQ("Naruto", "facil", "¿Quién es el maestro del Equipo 7?", 
-    ["A) Jiraiya", "B) Kakashi", "C) Iruka", "D) Asuma"], 1);
-addQ("Naruto", "facil", "¿Qué bestia vive dentro de Naruto?", 
-    ["A) Shukaku", "B) Kurama", "C) Matatabi", "D) Isobu"], 1);
-addQ("Naruto", "facil", "¿Cuál es la comida favorita de Naruto?", 
-    ["A) Sushi", "B) Ramen", "C) Arroz", "D) Pan"], 1);
-addQ("Naruto", "facil", "¿Quién es el mejor amigo y rival de Naruto?", 
-    ["A) Shikamaru", "B) Sasuke", "C) Kiba", "D) Neji"], 1);
-addQ("Naruto", "facil", "¿De qué aldea es Naruto?", 
-    ["A) Aldea de la Arena", "B) Aldea de la Niebla", "C) Aldea de la Hoja", "D) Aldea de la Roca"], 2);
-addQ("Naruto", "facil", "¿Quién mató a los padres de Naruto?", 
-    ["A) Orochimaru", "B) Obito", "C) Madara", "D) Itachi"], 1);
-addQ("Naruto", "facil", "¿Qué significa 'Hokage'?", 
-    ["A) Rey del Fuego", "B) Sombra de Fuego", "C) Dios del Fuego", "D) Guerrero de Fuego"], 1);
-addQ("Naruto", "facil", "¿Cuántas colas tiene Kurama?", 
-    ["A) 7", "B) 8", "C) 9", "D) 10"], 2);
-addQ("Naruto", "facil", "¿Quién es la compañera de equipo de Naruto que le gusta?", 
-    ["A) Hinata", "B) Sakura", "C) Ino", "D) Tenten"], 1);
-addQ("Naruto", "facil", "¿Qué símbolo lleva en la chaqueta el Cuarto Hokage?", 
-    ["A) Rayo", "B) Fuego", "C) Hoja", "D) Nube"], 0);
-addQ("Naruto", "facil", "¿Qué tipo de animal es Gamabunta?", 
-    ["A) Serpiente", "B) Rana", "C) Águila", "D) Lobo"], 1);
-addQ("Naruto", "facil", "¿Quién es el padre de Naruto?", 
-    ["A) Minato Namikaze", "B) Fugaku Uchiha", "C) Hiashi Hyuga", "D) Shikaku Nara"], 0);
-addQ("Naruto", "facil", "¿De qué color es el cabello de Naruto?", 
-    ["A) Negro", "B) Rubio", "C) Castaño", "D) Rojo"], 1);
-addQ("Naruto", "facil", "¿Qué técnica usa Naruto para crear copias?", 
-    ["A) Rasengan", "B) Chidori", "C) Kage Bunshin", "D) Byakugan"], 2);
-
-// ============= NARUTO — MEDIO =============
-addQ("Naruto", "medio", "¿Quién enseñó el Rasengan a Naruto?", 
-    ["A) Minato", "B) Jiraiya", "C) Kakashi", "D) Iruka"], 1);
-addQ("Naruto", "medio", "¿Qué ojo tiene Shisui Uchiha?", 
-    ["A) Mangekyou", "B) Sharingan", "C) Byakugan", "D) Rinnegan"], 0);
-addQ("Naruto", "medio", "¿Quién es el líder de Akatsuki al principio?", 
-    ["A) Obito", "B) Pain", "C) Itachi", "D) Kisame"], 1);
-addQ("Naruto", "medio", "¿Qué clan tiene el Byakugan?", 
-    ["A) Uchiha", "B) Hyuga", "C) Senju", "D) Uzumaki"], 1);
-addQ("Naruto", "medio", "¿Quién creó el Chidori?", 
-    ["A) Naruto", "B) Sasuke", "C) Kakashi", "D) Itachi"], 2);
-addQ("Naruto", "medio", "¿Qué significa Akatsuki?", 
-    ["A) Luna Roja", "B) Amanecer", "C) Noche", "D) Estrella"], 1);
-addQ("Naruto", "medio", "¿Quién es la hija de Hiashi Hyuga?", 
-    ["A) Hanabi", "B) Hinata", "C) Tenten", "D) Ino"], 1);
-addQ("Naruto", "medio", "¿Qué elemento tiene el Chidori?", 
-    ["A) Fuego", "B) Agua", "C) Rayo", "D) Viento"], 2);
-addQ("Naruto", "medio", "¿Quién es el maestro de Jiraiya?", 
-    ["A) Hashirama", "B) Hiruzen", "C) Minato", "D) Nagato"], 1);
-addQ("Naruto", "medio", "¿Qué selló el Cuarto Hokage?", 
-    ["A) A Kurama", "B) A Shukaku", "C) A sí mismo", "D) A Orochimaru"], 0);
-addQ("Naruto", "medio", "¿Cuántos portadores han tenido el Kyubi?", 
-    ["A) 2", "B) 3", "C) 4", "D) 5"], 1);
-addQ("Naruto", "medio", "¿Qué significa el nombre 'Uzumaki'?", 
-    ["A) Remolino", "B) Dragón", "C) Luna", "D) Estrella"], 0);
-addQ("Naruto", "medio", "¿Quién es la madre de Naruto?", 
-    ["A) Kushina", "B) Mikoto", "C) Hinata", "D) Mito"], 0);
-addQ("Naruto", "medio", "¿Qué aldeas atacó Pain?", 
-    ["A) Solo la Hoja", "B) Hoja y Arena", "C) Todas", "D) Ninguna"], 0);
-addQ("Naruto", "medio", "¿Quién es el hermano mayor de Itachi?", 
-    ["A) No tiene", "B) Sasuke", "C) Shisui", "D) Izuna"], 1);
-
-// ============= NARUTO — DIFÍCIL =============
-addQ("Naruto", "dificil", "¿Quién es el antepasado de los Uchiha?", 
-    ["A) Indra", "B) Asura", "C) Hamura", "D) Hagoromo"], 0);
-addQ("Naruto", "dificil", "¿Qué es el Rinnegan?", 
-    ["A) Ojo de poder", "B) Ojo de la reencarnación", "C) Ojo de la verdad", "D) Ojo del tiempo"], 1);
-addQ("Naruto", "dificil", "¿Quién fue el primer Jinchuriki de Kurama?", 
-    ["A) Mito Uzumaki", "B) Kushina", "C) Rin", "D) Karin"], 0);
-addQ("Naruto", "dificil", "¿Qué significa el nombre de 'Kaguya'?", 
-    ["A) Diosa de la Luna", "B) Diosa del Sol", "C) Diosa de la Tierra", "D) Diosa del Fuego"], 0);
-addQ("Naruto", "dificil", "¿Quién creó las 9 bestias con cola?", 
-    ["A) Hagoromo Otsutsuki", "B) Hamura", "C) Kaguya", "D) Indra"], 0);
-addQ("Naruto", "dificil", "¿Qué edad tenía Itachi cuando se graduó de la academia?", 
-    ["A) 6 años", "B) 7 años", "C) 8 años", "D) 9 años"], 0);
-addQ("Naruto", "dificil", "¿Cuántos años duró la Cuarta Gran Guerra Ninja?", 
-    ["A) 1 día", "B) 3 días", "C) 1 semana", "D) 1 mes"], 0);
-addQ("Naruto", "dificil", "¿Quién es el verdadero líder detrás de Akatsuki?", 
-    ["A) Pain", "B) Obito", "C) Madara", "D) Kabuto"], 1);
-addQ("Naruto", "dificil", "¿Qué poder le dio el Sabio de los Seis Caminos a Naruto?", 
-    ["A) Sabiduría", "B) Fuerza y Chakra", "C) Inmortalidad", "D) Visión del futuro"], 1);
-addQ("Naruto", "dificil", "¿En qué capítulo muere Itachi?", 
-    ["A) 350", "B) 383", "C) 400", "D) 450"], 1);
-addQ("Naruto", "dificil", "¿Qué significa 'Uchiha'?", 
-    ["A) Ojo", "B) Abanico", "C) Fuego", "D) Cuervo"], 1);
-addQ("Naruto", "dificil", "¿Quién es el hijo mayor del Sabio de los Seis Caminos?", 
-    ["A) Asura", "B) Indra", "C) Hamura", "D) Naruto"], 1);
-addQ("Naruto", "dificil", "¿Qué clanes fundaron la aldea?", 
-    ["A) Uchiha y Hyuga", "B) Senju y Uchiha", "C) Senju y Hyuga", "D) Uzumaki y Senju"], 1);
-addQ("Naruto", "dificil", "¿Qué jutsu prohibido usó Naruto contra Haku?", 
-    ["A) Rasengan", "B) Kage Bunshin", "C) Rasenshuriken", "D) Ninguno"], 1);
-addQ("Naruto", "dificil", "¿Quién es el creador original del Rasengan?", 
-    ["A) Jiraiya", "B) Minato", "C) Naruto", "D) Asuma"], 1);
-
-// ============= ONE PIECE — FÁCIL =============
-addQ("One Piece", "facil", "¿Quién es el protagonista?", 
-    ["A) Zoro", "B) Luffy", "C) Sanji", "D) Nami"], 1);
-addQ("One Piece", "facil", "¿Qué quiere encontrar Luffy?", 
-    ["A) Oro", "B) El One Piece", "C) Un barco", "D) Una espada"], 1);
-addQ("One Piece", "facil", "¿Qué fruta comió Luffy?", 
-    ["A) Mera Mera", "B) Gomu Gomu", "C) Hito Hito", "D) Ope Ope"], 1);
-addQ("One Piece", "facil", "¿Quién usa tres espadas?", 
-    ["A) Sanji", "B) Zoro", "C) Usopp", "D) Jinbe"], 1);
-addQ("One Piece", "facil", "¿De qué color es el cabello de Sanji?", 
-    ["A) Negro", "B) Rubio", "C) Rojo", "D) Azul"], 1);
-addQ("One Piece", "facil", "¿Quién es la navegante?", 
-    ["A) Robin", "B) Nami", "C) Vivi", "D) Yamato"], 1);
-addQ("One Piece", "facil", "¿Qué dice Luffy todo el tiempo?", 
-    ["A) ¡Seré el rey de los piratas!", "B) ¡Vamos!", "C) ¡Comamos!", "D) ¡Corran!"], 0);
-addQ("One Piece", "facil", "¿Quién le dio el sombrero de paja a Luffy?", 
-    ["A) Ace", "B) Shanks", "C) Roger", "D) Sabo"], 1);
-addQ("One Piece", "facil", "¿Cómo se llama el primer barco de Luffy?", 
-    ["A) Thousand Sunny", "B) Going Merry", "C) Red Force", "D) Oro Jackson"], 1);
-addQ("One Piece", "facil", "¿Qué animal es Tony Tony Chopper?", 
-    ["A) Perro", "B) Reno", "C) Gato", "D) Zorro"], 1);
-addQ("One Piece", "facil", "¿Quién es el cocinero?", 
-    ["A) Chopper", "B) Sanji", "C) Franky", "D) Brook"], 1);
-addQ("One Piece", "facil", "¿Dónde nació Luffy?", 
-    ["A) Grand Line", "B) East Blue", "C) North Blue", "D) South Blue"], 1);
-addQ("One Piece", "facil", "¿Quién es el capitán del barco de Shanks?", 
-    ["A) Shanks", "B) Roger", "C) Buggy", "D) Rayleigh"], 0);
-addQ("One Piece", "facil", "¿Cuántas hojas tiene el sombrero de paja?", 
-    ["A) 4", "B) 5", "C) 6", "D) 7"], 1);
-addQ("One Piece", "facil", "¿Quién es el barco actual de Luffy?", 
-    ["A) Going Merry", "B) Thousand Sunny", "C) Oro Jackson", "D) Red Force"], 1);
-
-// ============= ONE PIECE — MEDIO =============
-addQ("One Piece", "medio", "¿Qué significa D. en el nombre?", 
-    ["A) Dragón", "B) Voluntad", "C) Oscuridad", "D) Luz"], 1);
-addQ("One Piece", "medio", "¿Quién es el padre de Luffy?", 
-    ["A) Gol D. Roger", "B) Monkey D. Garp", "C) Monkey D. Dragon", "D) Shanks"], 2);
-addQ("One Piece", "medio", "¿Qué es el Haki?", 
-    ["A) Una espada", "B) Energía espiritual", "C) Una fruta", "D) Un barco"], 1);
-addQ("One Piece", "medio", "¿Quién es el rival de Zoro?", 
-    ["A) Mihawk", "B) Sanji", "C) Luffy", "D) Kuma"], 0);
-addQ("One Piece", "medio", "¿Qué edad tiene Luffy al inicio?", 
-    ["A) 16", "B) 17", "C) 18", "D) 19"], 1);
-addQ("One Piece", "medio", "¿Quién mató a Ace?", 
-    ["A) Akainu", "B) Aokiji", "C) Kizaru", "D) Shanks"], 0);
-addQ("One Piece", "medio", "¿Qué isla es la última?", 
-    ["A) Skypiea", "B) Laugh Tale", "C) Sabaody", "D) Wano"], 1);
-addQ("One Piece", "medio", "¿Cómo se llama la tripulación de Barba Blanca?", 
-    ["A) Los Mugiwara", "B) Los Piratas de Barba Blanca", "C) Los Revolucionarios", "D) La Marina"], 1);
-addQ("One Piece", "medio", "¿Qué puede hacer la fruta de Ace?", 
-    ["A) Hielo", "B) Fuego", "C) Rayos", "D) Tierra"], 1);
-addQ("One Piece", "medio", "¿Quién es el médico?", 
-    ["A) Chopper", "B) Brook", "C) Robin", "D) Nami"], 0);
-addQ("One Piece", "medio", "¿Qué mar recorre Luffy primero?", 
-    ["A) North Blue", "B) East Blue", "C) West Blue", "D) South Blue"], 1);
-addQ("One Piece", "medio", "¿Qué es el Going Merry?", 
-    ["A) Un barco", "B) Una espada", "C) Un cañón", "D) Una lanza"], 0);
-addQ("One Piece", "medio", "¿Quién es el más fuerte de la tripulación después de Luffy?", 
-    ["A) Sanji", "B) Zoro", "C) Jinbe", "D) Usopp"], 1);
-addQ("One Piece", "medio", "¿Qué es la Marina?", 
-    ["A) Piratas", "B) Ejército mundial", "C) Revolucionarios", "D) Mercaderes"], 1);
-addQ("One Piece", "medio", "¿Quién creó el One Piece?", 
-    ["A) Shanks", "B) Gol D. Roger", "C) Barba Blanca", "D) Kaido"], 1);
-
-// ============= ONE PIECE — DIFÍCIL =============
-addQ("One Piece", "dificil", "¿Qué es el siglo vacío?", 
-    ["A) Un año sin historia", "B) 100 años borrados", "C) Un siglo sin reyes", "D) Una era de paz"], 1);
-addQ("One Piece", "dificil", "¿Quién es Joy Boy?", 
-    ["A) Luffy", "B) Roger", "C) Una persona del pasado", "D) Un pirata"], 2);
-addQ("One Piece", "dificil", "¿Qué significa el nombre de 'Laugh Tale'?", 
-    ["A) Isla de la risa", "B) Leyenda feliz", "C) Cuento feliz", "D) Todas"], 0);
-addQ("One Piece", "dificil", "¿Cuántos caminos tiene la Grand Line?", 
-    ["A) 1", "B) 2", "C) 4", "D) 6"], 2);
-addQ("One Piece", "dificil", "¿Qué tipo de fruta es la más rara?", 
-    ["A) Paramecia", "B) Logia", "C) Zoan", "D) Zoan Mítica"], 3);
-addQ("One Piece", "dificil", "¿Quién fue el antiguo dueño de la fruta de Luffy?", 
-    ["A) Ace", "B) Shanks", "C) Roger", "D) Joy Boy"], 3);
-addQ("One Piece", "dificil", "¿Qué hace el Haki del Conquistador?", 
-    ["A) Golpear fuerte", "B) Derribar enemigos débiles", "C) Ver el futuro", "D) Defenderse"], 1);
-addQ("One Piece", "dificil", "¿Quién fue el primer portador del sombrero de paja?", 
-    ["A) Shanks", "B) Roger", "C) Joy Boy", "D) Garp"], 2);
-addQ("One Piece", "dificil", "¿Qué es un Poneglyph?", 
-    ["A) Un libro", "B) Una piedra con historia antigua", "C) Un mapa", "D) Un tesoro"], 1);
-addQ("One Piece", "dificil", "¿Quién es el gobernante oculto del mundo?", 
-    ["A) Blackbeard", "B) Kaido", "C) Imu", "D) Akainu"], 2);
-addQ("One Piece", "dificil", "¿Qué significa la inicial D. según la leyenda?", 
-    ["A) Dragón", "B) Amanecer", "C) Oscuridad", "D) Destino"], 1);
-addQ("One Piece", "dificil", "¿Cuántas frutas del diablo tiene Barbanegra?", 
-    ["A) 1", "B) 2", "C) 3", "D) 4"], 1);
-addQ("One Piece", "dificil", "¿Qué es la Red Line?", 
-    ["A) Un mar", "B) Un continente que divide los mares", "C) Una isla", "D) Un barco"], 1);
-addQ("One Piece", "dificil", "¿Quién es la emperatriz pirata enamorada de Luffy?", 
-    ["A) Nami", "B) Boa Hancock", "C) Robin", "D) Vivi"], 1);
-addQ("One Piece", "dificil", "¿Qué es el Nuevo Mundo?", 
-    ["A) East Blue", "B) Primera mitad de Grand Line", "C) Segunda mitad de Grand Line", "D) El Mar del Norte"], 2);
-
-// ============= DRAGON BALL — FÁCIL =============
-addQ("Dragon Ball", "facil", "¿Quién es el protagonista?", 
-    ["A) Vegeta", "B) Goku", "C) Gohan", "D) Piccolo"], 1);
-addQ("Dragon Ball", "facil", "¿De dónde viene Goku?", 
-    ["A) Tierra", "B) Planeta Vegeta", "C) Namek", "D) Marte"], 1);
-addQ("Dragon Ball", "facil", "¿Cuántas esferas del dragón hay?", 
-    ["A) 6", "B) 7", "C) 8", "D) 9"], 1);
-addQ("Dragon Ball", "facil", "¿Quién es el príncipe de los Saiyajin?", 
-    ["A) Raditz", "B) Nappa", "C) Vegeta", "D) Broly"], 2);
-addQ("Dragon Ball", "facil", "¿Quién es el maestro de Goku?", 
-    ["A) Maestro Roshi", "B) Piccolo", "C) Kami", "D) Sr. Popo"], 0);
-addQ("Dragon Ball", "facil", "¿Cómo se llama la técnica de energía de Goku?", 
-    ["A) Galick Ho", "B) Kamehameha", "C) Final Flash", "D) Makankosappo"], 1);
-addQ("Dragon Ball", "facil", "¿Quién es la esposa de Goku?", 
-    ["A) Bulma", "B) Milk", "C) Androide 18", "D) Videl"], 1);
-addQ("Dragon Ball", "facil", "¿Cuál es el nombre del abuelo adoptivo de Goku?", 
-    ["A) Bardock", "B) Gohan", "C) Ox-Sama", "D) Krilin"], 1);
-addQ("Dragon Ball", "facil", "¿Quién es el mejor amigo humano de Goku?", 
-    ["A) Yamcha", "B) Krilin", "C) Ten Shin Han", "D) Mr. Satán"], 1);
-addQ("Dragon Ball", "facil", "¿Qué color de cabello tiene Goku en Super Saiyajin?", 
-    ["A) Negro", "B) Rubio", "C) Rojo", "D) Azul"], 1);
-addQ("Dragon Ball", "facil", "¿Quién es el hijo mayor de Goku?", 
-    ["A) Goten", "B) Gohan", "C) Trunks", "D) Pan"], 1);
-addQ("Dragon Ball", "facil", "¿Qué animal es Shenlong?", 
-    ["A) Fénix", "B) Dragón", "C) Tigre", "D) Lobo"], 1);
-addQ("Dragon Ball", "facil", "¿Quién creó las Esferas del Dragón de la Tierra?", 
-    ["A) Dende", "B) Kami", "C) Porunga", "D) Shenlong"], 1);
-addQ("Dragon Ball", "facil", "¿Qué significa Saiyajin?", 
-    ["A) Guerrero del espacio", "B) Persona de la selva", "C) Luchador fuerte", "D) Guerrero"], 1);
-addQ("Dragon Ball", "facil", "¿Cómo se llama el hijo menor de Goku?", 
-    ["A) Trunks", "B) Goten", "C) Gohan", "D) Pan"], 1);
-
-// ============= DRAGON BALL — MEDIO =============
-addQ("Dragon Ball", "medio", "¿Cuál es el nombre de nacimiento de Goku?", 
-    ["A) Kakarotto", "B) Bardock", "C) Goku", "D) Raditz"], 0);
-addQ("Dragon Ball", "medio", "¿Quién destruyó el planeta Vegeta?", 
-    ["A) Vegeta", "B) Freezer", "C) Raditz", "D) Bardock"], 1);
-addQ("Dragon Ball", "medio", "¿Quién es el dios de la destrucción?", 
-    ["A) Whis", "B) Bills", "C) Sr. Popo", "D) Kaiosama"], 1);
-addQ("Dragon Ball", "medio", "¿Qué es la Sala del Tiempo?", 
-    ["A) 1 día = 1 año", "B) 1 día = 1 mes", "C) No existe", "D) Un lugar lento"], 0);
-addQ("Dragon Ball", "medio", "¿Quién es la hija de Gohan?", 
-    ["A) Pan", "B) Bra", "C) Videl", "D) Bulma"], 0);
-addQ("Dragon Ball", "medio", "¿Quién es la esposa de Vegeta?", 
-    ["A) Bulma", "B) Milk", "C) Androide 18", "D) Videl"], 0);
-addQ("Dragon Ball", "medio", "¿Qué transformación tiene el cabello largo?", 
-    ["A) Super Saiyajin", "B) Super Saiyajin 2", "C) Super Saiyajin 3", "D) Dios"], 2);
-addQ("Dragon Ball", "medio", "¿Quién entrenó a Goku en el más allá?", 
-    ["A) Kaiosama del Norte", "B) Kaiosama del Sur", "C) Kaiosama del Este", "D) Kaiosama del Oeste"], 0);
-addQ("Dragon Ball", "medio", "¿Qué es Porunga?", 
-    ["A) El dragón de Namek", "B) Un dragón pequeño", "C) Una esfera", "D) Un guerrero"], 0);
-addQ("Dragon Ball", "medio", "¿Quién es el padre de Piccolo?", 
-    ["A) Piccolo Daimaku", "B) Kami", "C) Nail", "D) Guru"], 0);
-addQ("Dragon Ball", "medio", "¿Qué es el Ki?", 
-    ["A) Dinero", "B) Energía vital", "C) Fuerza física", "D) Magia"], 1);
-addQ("Dragon Ball", "medio", "¿Cuántos deseos concede Shenlong?", 
-    ["A) 1", "B) 2", "C) 3", "D) 7"], 0);
-addQ("Dragon Ball", "medio", "¿Quién es el creador de Dragon Ball?", 
-    ["A) Masashi Kishimoto", "B) Akira Toriyama", "C) Eiichiro Oda", "D) Tite Kubo"], 1);
-addQ("Dragon Ball", "medio", "¿Qué significa 'Kame'?", 
-    ["A) Tortuga", "B) Dragón", "C) Sol", "D) Luna"], 0);
-addQ("Dragon Ball", "medio", "¿Qué es el Ultra Instinto?", 
-    ["A) Moverse sin pensar", "B) Ser muy rápido", "C) No sentir dolor", "D) Volar"], 0);
-
-// ============= DRAGON BALL — DIFÍCIL =============
-addQ("Dragon Ball", "dificil", "¿Quién es el ángel de Bills?", 
-    ["A) Vados", "B) Whis", "C) Marcarita", "D) Kusu"], 1);
-addQ("Dragon Ball", "dificil", "¿Cuántos universos existen?", 
-    ["A) 8", "B) 10", "C) 12", "D) 14"], 2);
-addQ("Dragon Ball", "dificil", "¿Quién fue el primer Super Saiyajin de la historia?", 
-    ["A) Bardock", "B) Yamoshi", "C) Vegeta I", "D) Kakarotto"], 1);
-addQ("Dragon Ball", "dificil", "¿Qué es el Torneo del Poder?", 
-    ["A) Un juego", "B) Batalla entre universos", "C) Una fiesta", "D) Un entrenamiento"], 1);
-addQ("Dragon Ball", "dificil", "¿Quién es el guerrero más fuerte del Universo 11?", 
-    ["A) Goku", "B) Vegeta", "C) Jiren", "D) Toppo"], 2);
-addQ("Dragon Ball", "dificil", "¿Cuánto tiempo dura la vida de un Saiyajin adulto?", 
-    ["A) 50 años", "B) 70 años", "C) 80-100 años", "D) 200 años"], 2);
-addQ("Dragon Ball", "dificil", "¿Qué significa 'Shenlong'?", 
-    ["A) Dragón Divino", "B) Dragón de Fuego", "C) Dragón Azul", "D) Dragón de la Suerte"], 0);
-addQ("Dragon Ball", "dificil", "¿Quién es el antepasado de todos los Saiyajin?", 
-    ["A) Bardock", "B) Yamoshi", "C) Vegeta", "D) Kakarotto"], 1);
-addQ("Dragon Ball", "dificil", "¿En qué año salió el primer capítulo de Dragon Ball?", 
-    ["A) 1980", "B) 1984", "C) 1986", "D) 1989"], 1);
-addQ("Dragon Ball", "dificil", "¿Quién es el padre de Bardock?", 
-    ["A) Goku", "B) Bardock es el padre de Goku", "C) Vegeta", "D) No tiene padre"], 1);
-addQ("Dragon Ball", "dificil", "¿Qué es el Zeno-sama?", 
-    ["A) El rey de todo", "B) Un dios", "C) Un guerrero", "D) Un Saiyajin"], 0);
-addQ("Dragon Ball", "dificil", "¿Cuántos deseos concede Porunga?", 
-    ["A) 1", "B) 2", "C) 3", "D) 4"], 2);
-addQ("Dragon Ball", "dificil", "¿Quién es la hermana de Vados?", 
-    ["A) Whis", "B) Marcarita", "C) Kusu", "D) No tiene hermana"], 3);
-addQ("Dragon Ball", "dificil", "¿Qué raza es Piccolo?", 
-    ["A) Saiyajin", "B) Namekiano", "C) Terrícola", "D) Majin"], 1);
-addQ("Dragon Ball", "dificil", "¿Quién es el creador original de las Esferas del Dragón?", 
-    ["A) Dende", "B) Kami", "C) Zalama", "D) Guru"], 2);
-
-// ============= PREGUNTAS BÁSICAS PARA OTROS ANIMES =============
-const otrosAnimes = [
-    { name: "Demon Slayer", emoji: "🗡️", main: "Tanjiro Kamado", p2: "Nezuko", p3: "Zenitsu", p4: "Inosuke" },
-    { name: "Jujutsu Kaisen", emoji: "👊", main: "Yuji Itadori", p2: "Megumi", p3: "Nobara", p4: "Gojo" },
-    { name: "Attack on Titan", emoji: "🧱", main: "Eren Yeager", p2: "Mikasa", p3: "Armin", p4: "Levi" },
-    { name: "My Hero Academia", emoji: "💥", main: "Izuku Midoriya", p2: "Bakugo", p3: "All Might", p4: "Shoto" },
-    { name: "Death Note", emoji: "📓", main: "Light Yagami", p2: "L", p3: "Misa", p4: "Ryuk" },
-    { name: "Spy x Family", emoji: "🕵️", main: "Loid Forger", p2: "Yor", p3: "Anya", p4: "Bond" },
-    { name: "Hunter x Hunter", emoji: "🎣", main: "Gon Freecss", p2: "Killua", p3: "Kurapika", p4: "Leorio" },
-    { name: "Bleach", emoji: "⚔️", main: "Ichigo Kurosaki", p2: "Rukia", p3: "Aizen", p4: "Uryu" },
-    { name: "Tokyo Revengers", emoji: "🕰️", main: "Takemichi Hanagaki", p2: "Mikey", p3: "Draken", p4: "Hinata" },
-    { name: "Solo Leveling", emoji: "💫", main: "Sung Jinwoo", p2: "Cha Hae-In", p3: "Jinho", p4: "Beru" },
-    { name: "Chainsaw Man", emoji: "🪚", main: "Denji", p2: "Makima", p3: "Power", p4: "Aki" },
-    { name: "Fullmetal Alchemist", emoji: "⚙️", main: "Edward Elric", p2: "Alphonse", p3: "Winry", p4: "Mustang" }
-];
-
-otrosAnimes.forEach(anime => {
-    const niveles = ["facil", "medio", "dificil"];
-    niveles.forEach(nivel => {
-        for (let i = 0; i < 15; i++) {
-            const preguntas = [
-                `¿Quién es el protagonista de ${anime.name}?`,
-                `¿Qué nombre recibe la historia principal de ${anime.name}?`,
-                `¿Quién es el personaje más querido de ${anime.name}?`,
-                `¿En qué lugar se desarrolla mayormente ${anime.name}?`,
-                `¿Quién es el compañero principal de ${anime.main} en ${anime.name}?`
-            ];
-            const opciones = [
-                `A) ${anime.main}`,
-                `B) ${anime.p2}`,
-                `C) ${anime.p3}`,
-                `D) ${anime.p4}`
-            ];
-            addQ(anime.name, nivel, preguntas[i % preguntas.length], opciones, 0);
-        }
-    });
-});
-
-// ==================== LÓGICA DEL JUEGO ====================
-let estado = {
-    animeSeleccionado: null,
-    nivel: "facil",
-    cantidad: 15,
-    preguntasSeleccionadas: [],
-    indiceActual: 0,
-    correctas: 0,
-    errores: 0,
-    respondido: false
-};
+function showScreen(id) {
+  screens.forEach(screen => {
+    const element = $(screen);
+    if (element) element.classList.toggle("active", screen === id);
+  });
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
 
 function renderAnimeList() {
-    const lista = $("animeList");
-    lista.innerHTML = "";
-    animeList.forEach(anime => {
-        const tarjeta = document.createElement("div");
-        tarjeta.className = "anime-card";
-        tarjeta.innerHTML = `
-            <span class="anime-emoji">${anime.emoji}</span>
-            <span class="anime-name">${anime.name}</span>
-        `;
-        tarjeta.onclick = () => seleccionarAnime(anime);
-        lista.appendChild(tarjeta);
+  const search = $("animeSearch");
+  const list = $("animeList");
+  if (!search || !list) return;
+
+  const term = search.value.trim().toLocaleLowerCase();
+  const filtered = animeList.filter(anime =>
+    (anime.name + " " + anime.genre).toLocaleLowerCase().includes(term)
+  );
+
+  list.innerHTML = "";
+
+  filtered.forEach(anime => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "anime-card" +
+      (state.selected.has(anime.id) ? " selected" : "");
+    button.setAttribute("aria-pressed", String(state.selected.has(anime.id)));
+
+    const mark = document.createElement("span");
+    mark.className = "check-mark";
+    mark.textContent = state.selected.has(anime.id) ? "✓" : "";
+
+    const icon = document.createElement("span");
+    icon.className = "anime-icon";
+    icon.textContent = anime.icon;
+
+    const name = document.createElement("span");
+    name.className = "anime-name";
+    name.textContent = anime.name;
+
+    const genre = document.createElement("span");
+    genre.className = "anime-genre";
+    genre.textContent = anime.genre;
+
+    const info = document.createElement("span");
+    info.append(name, genre);
+    button.append(mark, icon, info);
+
+    button.addEventListener("click", () => {
+      if (state.selected.has(anime.id)) {
+        state.selected.delete(anime.id);
+      } else {
+        state.selected.add(anime.id);
+      }
+      renderAnimeList();
+      updateSelected();
     });
+
+    list.appendChild(button);
+  });
+
+  if (filtered.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "No encontramos animes con esa búsqueda.";
+    list.appendChild(empty);
+  }
 }
 
-function seleccionarAnime(anime) {
-    estado.animeSeleccionado = anime;
-    $("selEmoji").textContent = anime.emoji;
-    $("selName").textContent = anime.name;
-    mostrarPantalla("configScreen");
+function updateSelected() {
+  $("selectedCount").textContent = state.selected.size;
+  $("toConfigBtn").disabled = state.selected.size === 0;
+  $("selectAllBtn").textContent =
+    state.selected.size === animeList.length
+      ? "Quitar selección"
+      : "Seleccionar todos";
 }
 
-document.querySelectorAll(".level-btn").forEach(boton => {
-    boton.onclick = () => {
-        document.querySelectorAll(".level-btn").forEach(b => b.classList.remove("active"));
-        boton.classList.add("active");
-        estado.nivel = boton.dataset.level;
-    };
-});
-
-$("qtySelect").onchange = () => {
-    estado.cantidad = parseInt($("qtySelect").value);
-};
-
-$("startBtn").onclick = () => {
-    if (!estado.animeSeleccionado) return;
-    
-    const preguntasAnime = questions.filter(
-        p => p.anime === estado.animeSeleccionado.name && p.level === estado.nivel
+function setSelectedButton(selector, attr, value) {
+  document.querySelectorAll(selector).forEach(button => {
+    button.classList.toggle(
+      "selected",
+      button.getAttribute(attr) === String(value)
     );
-    
-    estado.preguntasSeleccionadas = shuffle(preguntasAnime).slice(0, estado.cantidad);
-    estado.indiceActual = 0;
-    estado.correctas = 0;
-    estado.errores = 0;
-    
-    mostrarPantalla("quizScreen");
-    mostrarPregunta();
-};
+  });
+}
 
-function mostrarPregunta() {
-    const preg = estado.preguntasSeleccionadas[estado.indiceActual];
-    estado.respondido = false;
-    
-    $("qCounter").textContent = `Pregunta ${estado.indiceActual + 1}/${estado.preguntasSeleccionadas.length}`;
-    $("scoreLive").textContent = `✅ ${estado.correctas} | ❌ ${estado.errores}`;
-    
-    const progreso = ((estado.indiceActual) / estado.preguntasSeleccionadas.length) * 100;
-    $("progressFill").style.width = `${progreso}%`;
-    
-    $("animeTag").textContent = estado.animeSeleccionado.name;
-    $("questionText").textContent = preg.text;
-    $("feedbackBox").textContent = "";
-    $("feedbackBox").className = "feedback-box";
-    $("nextBtn").disabled = true;
-    
-    const contenedor = $("optionsBox");
-    contenedor.innerHTML = "";
-    preg.options.forEach((opcion, indice) => {
-        const boton = document.createElement("button");
-        boton.className = "option-btn";
-        boton.textContent = opcion;
-        boton.onclick = () => elegirRespuesta(indice);
-        contenedor.appendChild(boton);
+function buildQuestions() {
+  const all = [];
+
+  [...state.selected].forEach(id => {
+    const anime = animeList.find(item => item.id === id);
+    const questions = BANK[id] || [];
+
+    questions.forEach(item => {
+      const [question, correct, distractors] = item;
+      all.push({
+        anime: anime.name,
+        question,
+        correct,
+        options: shuffle([correct, ...distractors])
+      });
     });
+  });
+
+  let ordered = shuffle(all);
+
+  // Dificultad: cambia la cantidad de respuestas difíciles en una partida.
+  // Las preguntas siguen siendo de los animes seleccionados.
+  if (state.level === "dificil") {
+    ordered = ordered.reverse();
+  }
+
+  return ordered.slice(0, Math.min(state.qty, ordered.length));
 }
 
-function elegirRespuesta(indice) {
-    if (estado.respondido) return;
-    estado.respondido = true;
-    
-    const preg = estado.preguntasSeleccionadas[estado.indiceActual];
-    const botones = document.querySelectorAll(".option-btn");
-    
-    botones.forEach((b, i) => {
-        b.disabled = true;
-        if (i === preg.correct) b.classList.add("correct");
-        else if (i === indice && i !== preg.correct) b.classList.add("incorrect");
+function startQuiz() {
+  if (state.selected.size === 0) {
+    $("configNotice").textContent = "Selecciona al menos un anime para comenzar.";
+    return;
+  }
+
+  state.questions = buildQuestions();
+  state.index = 0;
+  state.correct = 0;
+  state.wrong = 0;
+  state.answered = false;
+
+  if (state.questions.length === 0) {
+    $("configNotice").textContent = "No hay preguntas disponibles.";
+    return;
+  }
+
+  $("configNotice").textContent = "";
+  showScreen("quizScreen");
+  renderQuestion();
+}
+
+function renderQuestion() {
+  const question = state.questions[state.index];
+  if (!question) return;
+
+  state.answered = false;
+
+  $("questionCount").textContent =
+    `PREGUNTA ${state.index + 1} / ${state.questions.length}`;
+  $("questionNumber").textContent =
+    `PREGUNTA ${String(state.index + 1).padStart(2, "0")}`;
+  $("progressBar").style.width =
+    `${(state.index / state.questions.length) * 100}%`;
+  $("animeTag").textContent = question.anime.toLocaleUpperCase();
+  $("scoreLive").textContent = `✦ ${state.correct} puntos`;
+  $("questionText").textContent = question.question;
+
+  $("feedbackBox").textContent = "";
+  $("feedbackBox").className = "feedback-box";
+  $("optionsList").innerHTML = "";
+
+  question.options.forEach((option, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "option-btn";
+
+    const letter = document.createElement("span");
+    letter.className = "option-letter";
+    letter.textContent = LETTERS[index];
+
+    const answer = document.createElement("span");
+    answer.textContent = option;
+
+    button.append(letter, answer);
+    button.addEventListener("click", () => answerQuestion(option, button));
+    $("optionsList").appendChild(button);
+  });
+
+  $("nextBtn").disabled = true;
+  $("nextBtn").textContent =
+    state.index === state.questions.length - 1
+      ? "Ver resultado ✦"
+      : "Siguiente pregunta →";
+}
+
+function answerQuestion(option, clickedButton) {
+  if (state.answered) return;
+
+  state.answered = true;
+  const question = state.questions[state.index];
+  const isCorrect = option === question.correct;
+
+  if (isCorrect) {
+    state.correct++;
+  } else {
+    state.wrong++;
+  }
+
+  document.querySelectorAll("#optionsList .option-btn").forEach(button => {
+    button.disabled = true;
+    const text = button.querySelector("span:last-child").textContent;
+
+    if (text === question.correct) {
+      button.classList.add("correct");
+    } else if (button === clickedButton && !isCorrect) {
+      button.classList.add("wrong");
+    }
+  });
+
+  $("feedbackBox").className =
+    "feedback-box " + (isCorrect ? "good" : "bad");
+
+  $("feedbackBox").textContent = isCorrect
+    ? "¡Correcto! Tu conocimiento otaku está creciendo."
+    : `No exactamente. La respuesta correcta es: ${question.correct}.`;
+
+  $("scoreLive").textContent = `✦ ${state.correct} puntos`;
+  $("nextBtn").disabled = false;
+}
+
+function nextQuestion() {
+  if (!state.answered) return;
+
+  if (state.index < state.questions.length - 1) {
+    state.index++;
+    renderQuestion();
+  } else {
+    showResults();
+  }
+}
+
+function showResults() {
+  const total = state.questions.length;
+  const percent = total ? Math.round((state.correct / total) * 100) : 0;
+
+  $("progressBar").style.width = "100%";
+  $("finalScore").textContent = `${percent}%`;
+  $("correctCount").textContent = state.correct;
+  $("wrongCount").textContent = state.wrong;
+  $("totalCount").textContent = total;
+
+  let icon = "📚";
+  let title = "¡Sigue entrenando!";
+  let message = "Cada partida te ayuda a recordar más detalles de tus animes favoritos.";
+
+  if (percent === 100) {
+    icon = "👑";
+    title = "¡Leyenda Otaku!";
+    message = "¡Perfecto! Respondiste todas las preguntas correctamente.";
+  } else if (percent >= 80) {
+    icon = "🏆";
+    title = "¡Otaku de élite!";
+    message = "¡Excelente resultado! Conoces muy bien estos universos.";
+  } else if (percent >= 60) {
+    icon = "⚡";
+    title = "¡Buen trabajo!";
+    message = "Vas por buen camino. Sigue practicando.";
+  } else if (percent >= 35) {
+    icon = "🔥";
+    title = "¡No te rindas!";
+    message = "Repasa tus animes favoritos y vuelve a intentarlo.";
+  }
+
+  $("resultIcon").textContent = icon;
+  $("resultTitle").textContent = title;
+  $("resultMessage").textContent = message;
+
+  showScreen("resultScreen");
+}
+
+function connectEvents() {
+  $("animeSearch").addEventListener("input", renderAnimeList);
+
+  $("selectAllBtn").addEventListener("click", () => {
+    if (state.selected.size === animeList.length) {
+      state.selected.clear();
+    } else {
+      animeList.forEach(anime => state.selected.add(anime.id));
+    }
+
+    renderAnimeList();
+    updateSelected();
+  });
+
+  $("toConfigBtn").addEventListener("click", () => {
+    if (!state.selected.size) return;
+    $("configNotice").textContent = "";
+    showScreen("configScreen");
+  });
+
+  $("backToAnime").addEventListener("click", () => {
+    showScreen("selectScreen");
+  });
+
+  document.querySelectorAll(".level-btn").forEach(button => {
+    button.addEventListener("click", () => {
+      state.level = button.dataset.level;
+      setSelectedButton(".level-btn", "data-level", state.level);
     });
-    
-    if (indice === preg.correct) {
-        estado.correctas++;
-        $("feedbackBox").textContent = "✅ ¡Correcto!";
-        $("feedbackBox").classList.add("correct");
-    } else {
-        estado.errores++;
-        $("feedbackBox").textContent = "❌ Incorrecto";
-        $("feedbackBox").classList.add("incorrect");
-    }
-    
-    $("scoreLive").textContent = `✅ ${estado.correctas} | ❌ ${estado.errores}`;
-    $("nextBtn").disabled = false;
-}
+  });
 
-$("nextBtn").onclick = () => {
-    estado.indiceActual++;
-    if (estado.indiceActual >= estado.preguntasSeleccionadas.length) {
-        mostrarResultado();
-    } else {
-        mostrarPregunta();
-    }
-};
-
-function mostrarResultado() {
-    mostrarPantalla("resultScreen");
-    
-    const total = estado.preguntasSeleccionadas.length;
-    const porcentaje = Math.round((estado.correctas / total) * 100);
-    
-    $("okCount").textContent = estado.correctas;
-    $("errCount").textContent = estado.errores;
-    $("percent").textContent = `${porcentaje}%`;
-    
-    if (estado.errores >= 7) {
-        $("resultEmoji").textContent = "😅";
-        $("resultTitle").textContent = "¡Ánimo!";
-        $("resultMsg").textContent = "Anda a ver el anime para que respondas bien noob 😜📺";
-    } else if (estado.errores >= 5) {
-        $("resultEmoji").textContent = "🙂";
-        $("resultTitle").textContent = "Puedes mejorar";
-        $("resultMsg").textContent = "Te faltó un poco, ¡vuelve a intentarlo!";
-    } else if (estado.errores >= 3) {
-        $("resultEmoji").textContent = "🎉";
-        $("resultTitle").textContent = "¡Bien hecho!";
-        $("resultMsg").textContent = "¡Buen conocimiento del anime!";
-    } else {
-        $("resultEmoji").textContent = "🏆";
-        $("resultTitle").textContent = "¡Excelente!";
-        $("resultMsg").textContent = "¡Eres un verdadero experto en animes! 🎌✨";
-    }
-}
-
-function mostrarPantalla(idPantalla) {
-    document.querySelectorAll(".screen").forEach(p => {
-        p.classList.add("hidden");
-        p.classList.remove("active");
+  document.querySelectorAll(".qty-btn").forEach(button => {
+    button.addEventListener("click", () => {
+      state.qty = Number(button.dataset.qty);
+      setSelectedButton(".qty-btn", "data-qty", state.qty);
     });
-    $(idPantalla).classList.remove("hidden");
-    $(idPantalla).classList.add("active");
+  });
+
+  $("startBtn").addEventListener("click", startQuiz);
+  $("nextBtn").addEventListener("click", nextQuestion);
+
+  $("quitBtn").addEventListener("click", () => {
+    if (confirm("¿Quieres salir de esta partida? Perderás el progreso actual.")) {
+      showScreen("configScreen");
+    }
+  });
+
+  $("retryBtn").addEventListener("click", startQuiz);
+  $("homeBtn").addEventListener("click", () => showScreen("selectScreen"));
+
+  $("brandHome").addEventListener("click", event => {
+    event.preventDefault();
+    showScreen("selectScreen");
+  });
 }
 
-$("back1").onclick = () => mostrarPantalla("selectScreen");
-$("exitBtn").onclick = () => { if (confirm("¿Salir del quiz?")) mostrarPantalla("selectScreen"); };
-$("retryBtn").onclick = () => mostrarPantalla("configScreen");
-$("homeBtn").onclick = () => mostrarPantalla("selectScreen");
+function init() {
+  connectEvents();
+  renderAnimeList();
+  updateSelected();
+}
 
-renderAnimeList();
+document.addEventListener("DOMContentLoaded", init);
